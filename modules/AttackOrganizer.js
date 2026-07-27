@@ -1,6 +1,6 @@
 /**
 
-TWCC Attack Organizer v3.6.3
+TWCC Attack Organizer v3.6.4
 
 Nur „Eintreffend“, frei sortierbare Buttons und explizite Aktion:
 
@@ -173,15 +173,16 @@ function getOverviewIncomingRows() {
 
     $('table').each(function () {
         const $table = $(this);
+        const tableElement = this;
 
-        // Nur direkte Tabellenzeilen prüfen. So werden keine übergeordneten
-        // Layout-Tabellen oder Container-Zeilen versehentlich eingefärbt.
-        const $directRows = $table.children('tbody').children('tr').add(
-            $table.children('tr')
-        );
+        // Nur Zeilen verwenden, deren nächster Tabellen-Vorfahre exakt diese
+        // Tabelle ist. Damit werden verschachtelte Layout-Tabellen ausgeschlossen.
+        const $directRows = $table.find('tr').filter(function () {
+            return $(this).closest('table')[0] === tableElement;
+        });
 
         const $headerRow = $directRows.filter(function () {
-            const text = normalizeText($(this).text());
+            const text = normalizeText($(this).children('th, td').text());
 
             return (
                 text.indexOf('befehl') !== -1 &&
@@ -194,19 +195,23 @@ function getOverviewIncomingRows() {
         if (!$headerRow.length) return;
 
         $directRows.each(function () {
+            const rowElement = this;
             const $row = $(this);
             const $cells = $row.children('td');
 
             if (!$cells.length) return;
 
-            // Quickedit muss direkt in einer Zelle dieser Datenzeile liegen.
-            // Nachfahren aus verschachtelten Tabellen zählen ausdrücklich nicht.
-            const hasDirectCommandEditor = $cells.filter(function () {
-                return $(this).find('.rename-icon, .quickedit-label, .quickedit').length > 0;
-            }).length > 0;
+            // Der Quickedit muss wirklich zu genau dieser Zeile gehören.
+            // Elemente aus einer verschachtelten Tabelle dürfen nicht zählen.
+            const hasOwnCommandEditor = $row
+                .find('.rename-icon, .quickedit-label, .quickedit')
+                .filter(function () {
+                    return $(this).closest('tr')[0] === rowElement;
+                })
+                .length > 0;
 
-            if (hasDirectCommandEditor) {
-                rows.push(this);
+            if (hasOwnCommandEditor) {
+                rows.push(rowElement);
             }
         });
     });
@@ -372,6 +377,6 @@ function destroy() {if (observer) observer.disconnect();observer = null;$(docume
 
 win.TWCC_AttackOrganizerLoaded = true;
 
-win.TWCC_AttackOrganizer = {version: '3.6.3-overview-row-scope-fix',init,destroy,refresh: scan};
+win.TWCC_AttackOrganizer = {version: '3.6.4-exact-row-scope',init,destroy,refresh: scan};
 
 if (document.readyState === 'loading') {$(init);} else {init();}})();

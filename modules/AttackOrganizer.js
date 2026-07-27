@@ -1,6 +1,6 @@
 /**
 
-TWCC Attack Organizer v3.6
+TWCC Attack Organizer v3.6.1
 
 Nur „Eintreffend“, frei sortierbare Buttons und explizite Aktion:
 
@@ -136,43 +136,89 @@ function setRowBackground($line, background) {if (attackLayout === 'line') {$lin
 
 function normalizeText(value) {return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();}
 
-function getIncomingRows() {const result = [];
+function isOverviewIncomingAttacksPage() {
+    const params = new URLSearchParams(window.location.search);
 
- $('table').each(function () {
-     let insideIncomingSection = false;
+    return (
+        params.get('screen') === 'overview_villages' &&
+        params.get('mode') === 'incomings' &&
+        params.get('subtype') === 'attacks'
+    );
+}
 
-     $(this).find('tr').each(function () {
-         const $row = $(this);
+function getOverviewIncomingRows() {
+    const rows = [];
 
-         // Abschnittsüberschriften stehen in TW normalerweise in einer TH-
-         // oder einer über mehrere Spalten laufenden TD-Zelle.
-         const $headingCell = $row.children('th, td[colspan]').first();
-         const heading = normalizeText($headingCell.text());
+    $('table').each(function () {
+        const $table = $(this);
+        const headerText = normalizeText($table.find('tr').first().text());
 
-         if (/^eintreffend(?:\s|\(|$)/.test(heading)) {
-             insideIncomingSection = true;
-             return;
-         }
+        // Die kombinierte Dorfübersicht besitzt unter anderem die Spalten
+        // „Befehl“, „Ziel“, „Herkunft“ und „Ankunft“.
+        const isIncomingCommandsTable =
+            headerText.indexOf('befehl') !== -1 &&
+            headerText.indexOf('ziel') !== -1 &&
+            headerText.indexOf('herkunft') !== -1 &&
+            headerText.indexOf('ankunft') !== -1;
 
-         // Sobald ein anderer Befehlsabschnitt beginnt, endet „Eintreffend“.
-         if (
-             /^(eigene befehle|ausgehend|unterstützungen|rückkehrend|befehle)(?:\s|\(|$)/.test(heading)
-         ) {
-             insideIncomingSection = false;
-             return;
-         }
+        if (!isIncomingCommandsTable) return;
 
-         if (
-             insideIncomingSection &&
-             $row.find('.rename-icon, .quickedit-label, .quickedit').length > 0
-         ) {
-             result.push(this);
-         }
-     });
- });
+        $table.find('tr').each(function () {
+            const $row = $(this);
 
- return $(Array.from(new Set(result)));
+            if (
+                $row.find('.rename-icon, .quickedit-label, .quickedit').length > 0 &&
+                $row.children('td').length > 0
+            ) {
+                rows.push(this);
+            }
+        });
+    });
 
+    return $(Array.from(new Set(rows)));
+}
+
+function getIncomingRows() {
+    if (isOverviewIncomingAttacksPage()) {
+        return getOverviewIncomingRows();
+    }
+
+    const result = [];
+
+    $('table').each(function () {
+        let insideIncomingSection = false;
+
+        $(this).find('tr').each(function () {
+            const $row = $(this);
+
+            // Abschnittsüberschriften stehen in TW normalerweise in einer TH-
+            // oder einer über mehrere Spalten laufenden TD-Zelle.
+            const $headingCell = $row.children('th, td[colspan]').first();
+            const heading = normalizeText($headingCell.text());
+
+            if (/^eintreffend(?:\s|\(|$)/.test(heading)) {
+                insideIncomingSection = true;
+                return;
+            }
+
+            // Sobald ein anderer Befehlsabschnitt beginnt, endet „Eintreffend“.
+            if (
+                /^(eigene befehle|ausgehend|unterstützungen|rückkehrend|befehle)(?:\s|\(|$)/.test(heading)
+            ) {
+                insideIncomingSection = false;
+                return;
+            }
+
+            if (
+                insideIncomingSection &&
+                $row.find('.rename-icon, .quickedit-label, .quickedit').length > 0
+            ) {
+                result.push(this);
+            }
+        });
+    });
+
+    return $(Array.from(new Set(result)));
 }
 
 function cleanupOutsideIncoming() {const allowed = new Set(getIncomingRows().toArray());
@@ -284,6 +330,6 @@ function destroy() {if (observer) observer.disconnect();observer = null;$(docume
 
 win.TWCC_AttackOrganizerLoaded = true;
 
-win.TWCC_AttackOrganizer = {version: '3.6.0-syntax-fix',init,destroy,refresh: scan};
+win.TWCC_AttackOrganizer = {version: '3.6.1-overview-incomings',init,destroy,refresh: scan};
 
 if (document.readyState === 'loading') {$(init);} else {init();}})();

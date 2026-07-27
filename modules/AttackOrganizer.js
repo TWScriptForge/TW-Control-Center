@@ -1,6 +1,6 @@
 /**
 
-TWCC Attack Organizer v3.6.2
+TWCC Attack Organizer v3.6.3
 
 Nur „Eintreffend“, frei sortierbare Buttons und explizite Aktion:
 
@@ -132,7 +132,29 @@ function addButtons(line, nr) {const $line = $(line);if ($line.attr('data-twcc-a
 
 function findCodes(name) {const found = [];for (let i = 0; i < buttonNames.length; i++) {if (name.indexOf(buttonNames[i]) !== -1) found.push(i);}return found;}
 
-function setRowBackground($line, background) {if (attackLayout === 'line') {$line.find('td').attr('style', function (_, old) {return (old || '') + ';background:' + background + ' !important;';});} else if (attackLayout === 'column') {$line.find('td').first().attr('style', function (_, old) {return (old || '') + ';background:' + background + ' !important;';});}$line.find('a').first().css({color: 'white',textShadow: '-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000'});}
+function setRowBackground($line, background) {
+    const $directCells = $line.children('td');
+
+    if (isOverviewIncomingAttacksPage()) {
+        // Auf dieser Seite ausschließlich die sichtbare Befehlszelle markieren.
+        $directCells.first().attr('style', function (_, old) {
+            return (old || '') + ';background:' + background + ' !important;';
+        });
+    } else if (attackLayout === 'line') {
+        $directCells.attr('style', function (_, old) {
+            return (old || '') + ';background:' + background + ' !important;';
+        });
+    } else if (attackLayout === 'column') {
+        $directCells.first().attr('style', function (_, old) {
+            return (old || '') + ';background:' + background + ' !important;';
+        });
+    }
+
+    $line.find('a').first().css({
+        color: 'white',
+        textShadow: '-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000'
+    });
+}
 
 function normalizeText(value) {return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();}
 
@@ -151,25 +173,39 @@ function getOverviewIncomingRows() {
 
     $('table').each(function () {
         const $table = $(this);
-        const headerText = normalizeText($table.find('tr').first().text());
 
-        // Die kombinierte Dorfübersicht besitzt unter anderem die Spalten
-        // „Befehl“, „Ziel“, „Herkunft“ und „Ankunft“.
-        const isIncomingCommandsTable =
-            headerText.indexOf('befehl') !== -1 &&
-            headerText.indexOf('ziel') !== -1 &&
-            headerText.indexOf('herkunft') !== -1 &&
-            headerText.indexOf('ankunft') !== -1;
+        // Nur direkte Tabellenzeilen prüfen. So werden keine übergeordneten
+        // Layout-Tabellen oder Container-Zeilen versehentlich eingefärbt.
+        const $directRows = $table.children('tbody').children('tr').add(
+            $table.children('tr')
+        );
 
-        if (!isIncomingCommandsTable) return;
+        const $headerRow = $directRows.filter(function () {
+            const text = normalizeText($(this).text());
 
-        $table.find('tr').each(function () {
+            return (
+                text.indexOf('befehl') !== -1 &&
+                text.indexOf('ziel') !== -1 &&
+                text.indexOf('herkunft') !== -1 &&
+                text.indexOf('ankunft') !== -1
+            );
+        }).first();
+
+        if (!$headerRow.length) return;
+
+        $directRows.each(function () {
             const $row = $(this);
+            const $cells = $row.children('td');
 
-            if (
-                $row.find('.rename-icon, .quickedit-label, .quickedit').length > 0 &&
-                $row.children('td').length > 0
-            ) {
+            if (!$cells.length) return;
+
+            // Quickedit muss direkt in einer Zelle dieser Datenzeile liegen.
+            // Nachfahren aus verschachtelten Tabellen zählen ausdrücklich nicht.
+            const hasDirectCommandEditor = $cells.filter(function () {
+                return $(this).find('.rename-icon, .quickedit-label, .quickedit').length > 0;
+            }).length > 0;
+
+            if (hasDirectCommandEditor) {
                 rows.push(this);
             }
         });
@@ -336,6 +372,6 @@ function destroy() {if (observer) observer.disconnect();observer = null;$(docume
 
 win.TWCC_AttackOrganizerLoaded = true;
 
-win.TWCC_AttackOrganizer = {version: '3.6.2-overview-colors-only',init,destroy,refresh: scan};
+win.TWCC_AttackOrganizer = {version: '3.6.3-overview-row-scope-fix',init,destroy,refresh: scan};
 
 if (document.readyState === 'loading') {$(init);} else {init();}})();

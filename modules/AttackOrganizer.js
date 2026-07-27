@@ -1,6 +1,6 @@
 /**
 
-TWCC Attack Organizer v3.5
+TWCC Attack Organizer v3.6
 
 Nur „Eintreffend“, frei sortierbare Buttons und explizite Aktion:
 
@@ -10,13 +10,16 @@ const win = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;const 
 
 if (!$) {console.error('[TWCC Attack Organizer] jQuery wurde nicht gefunden.');return;}
 
-// Beim erneuten Laden keine doppelten Listener/Observer erzeugen.if (win.TWCC_AttackOrganizer && typeof win.TWCC_AttackOrganizer.destroy === 'function') {try { win.TWCC_AttackOrganizer.destroy(); } catch (e) {}}
+// Beim erneuten Laden keine doppelten Listener/Observer erzeugen.
+if (win.TWCC_AttackOrganizer && typeof win.TWCC_AttackOrganizer.destroy === 'function') {try { win.TWCC_AttackOrganizer.destroy(); } catch (e) {}}
 
 const fallbackSettings = {0: ['[Gedefft]', 'Gedefft', 'green', 'white'],1: ['[Nachdeffen]', 'Nachdeffen', 'lime', 'black'],2: ['[Rausstellen]', 'Rausstellen', 'yellow', 'black'],3: ['[Tabben]', 'Tabben', 'orange', 'white'],4: ['[Readel]', 'Readel', 'orange', 'white'],5: [' | Fakeschutz IO', 'Fakeschutz IO', 'green', 'white'],6: [' | Aufstocken IO', 'Aufgestockt', 'green', 'white'],7: [' | Wallcheck', 'Wallcheck', 'yellow', 'black'],8: [' | Off Raus ⚠️', 'Off Raus', 'yellow', 'black'],9: [' | Fake DB', 'Fake?', 'green', 'white'],10: [' | Off DB', 'Off?', 'red', 'white'],11: [' | DONE ✅', 'DONE', 'dgreen', 'white']};
 
 const fallbackColors = {red: ['#c18a8a', '#c18a8a'],yellow: ['#ffd91c', '#e8c30d'],white: ['#ffffff', '#dbdbdb'],black: ['#000000', '#2b2b2b'],green: ['#31c908', '#228c05'],dgreen: ['#196f24', '#12551b'],orange: ['#ef8b10', '#d3790a'],lime: ['#ffd400', '#ffd400'],blue: ['#0d83dd', '#0860a3'],lblue: ['#22e5db', '#0cd3c9'],gray: ['#adb6c6', '#828891'],dorange: ['#ff0000', '#ff0000'],pink: ['#ff69b4', '#ff69b4'],incok: ['#659b5e', '#659b5e'],inckontrolle: ['#95bf74', '#95bf74'],durchlassen: ['#90323d', '#90323d'],raus: ['#ad2e24', '#ad2e24'],rausgestellt: ['#d8572a', '#d8572a'],tabben: ['#005e9b', '#005e9b'],getabben: ['#52acff', '#52acff'],cleaner: ['#ffb700', '#ffb700'],readel: ['#ffdd00', '#ffdd00'],Nachdeffen: ['#66CDAA', '#66CDAA'],holder: ['#D3D3D3', '#BDB76B']};
 
-// TWCC bereitet diese Werte über applyAttackOrganizerGlobals() vor.// Nur falls nichts vorhanden ist, werden die Originalwerte verwendet.const settings = (win.settings && Object.keys(win.settings).length)? win.settings: fallbackSettings;
+// TWCC bereitet diese Werte über applyAttackOrganizerGlobals() vor.
+// Nur falls nichts vorhanden ist, werden die Originalwerte verwendet.
+const settings = (win.settings && Object.keys(win.settings).length)? win.settings: fallbackSettings;
 
 const colors = Object.assign({}, fallbackColors, win.colors || {});const fontSize = Number(win.font_size) || 8;const attackLayout = win.attack_layout || 'column';
 
@@ -129,7 +132,7 @@ function addButtons(line, nr) {const $line = $(line);if ($line.attr('data-twcc-a
 
 function findCodes(name) {const found = [];for (let i = 0; i < buttonNames.length; i++) {if (name.indexOf(buttonNames[i]) !== -1) found.push(i);}return found;}
 
-function setRowBackground($line, background) {if (attackLayout === 'line') {$line.find('td').attr('style', function (, old) {return (old || '') + ';background:' + background + ' !important;';});} else if (attackLayout === 'column') {$line.find('td').first().attr('style', function (, old) {return (old || '') + ';background:' + background + ' !important;';});}$line.find('a').first().css({color: 'white',textShadow: '-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000'});}
+function setRowBackground($line, background) {if (attackLayout === 'line') {$line.find('td').attr('style', function (_, old) {return (old || '') + ';background:' + background + ' !important;';});} else if (attackLayout === 'column') {$line.find('td').first().attr('style', function (_, old) {return (old || '') + ';background:' + background + ' !important;';});}$line.find('a').first().css({color: 'white',textShadow: '-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000'});}
 
 function normalizeText(value) {return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();}
 
@@ -224,10 +227,32 @@ function scan() {scheduled = false;cleanupOutsideIncoming();
 
 function scheduleScan() {if (scheduled) return;scheduled = true;setTimeout(scan, 60);}
 
-function ensureButtonStyles() {if (document.getElementById('twcc-ao-visible-style')) return;const style = document.createElement('style');style.id = 'twcc-ao-visible-style';style.textContent =          .twcc-ao-buttons { visibility: visible !important; opacity: 1 !important; }
-         .twcc-ao-button { display: inline-block !important; visibility: visible !important; opacity: 1 !important; cursor: pointer !important; }
-         #incomings_table td, #commands_incomings td { overflow: visible !important; }
-    ;document.head.appendChild(style);}
+function ensureButtonStyles() {
+    if (document.getElementById('twcc-ao-visible-style')) return;
+
+    const style = document.createElement('style');
+    style.id = 'twcc-ao-visible-style';
+    style.textContent = `
+        .twcc-ao-buttons {
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        .twcc-ao-button {
+            display: inline-block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            cursor: pointer !important;
+        }
+
+        #incomings_table td,
+        #commands_incomings td {
+            overflow: visible !important;
+        }
+    `;
+
+    document.head.appendChild(style);
+}
 
 function init() {if (!document.body) {setTimeout(init, 100);return;}
 
@@ -259,6 +284,6 @@ function destroy() {if (observer) observer.disconnect();observer = null;$(docume
 
 win.TWCC_AttackOrganizerLoaded = true;
 
-win.TWCC_AttackOrganizer = {version: '3.5.0-sortable-actions',init,destroy,refresh: scan};
+win.TWCC_AttackOrganizer = {version: '3.6.0-syntax-fix',init,destroy,refresh: scan};
 
 if (document.readyState === 'loading') {$(init);} else {init();}})();

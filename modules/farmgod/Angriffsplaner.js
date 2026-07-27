@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TWCC Angriffsplaner
 // @namespace    TWCC
-// @version      1.1.11
+// @version      1.1.12
 // @description  Angriffsplaner mit versteckter Hotkey-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
 // @author       Daniel 
 // @match        https://*.die-staemme.de/game.php*
@@ -29,6 +29,7 @@
     const CLOSE_MARKER_KEY = 'TWCC_DSU_CLOSE_MARKER';
     const AUTOMATION_ENABLED_KEY = 'TWCC_DSU_HIDDEN_AUTOMATION_ENABLED';
     const TEMPLATE_MAP_KEY = 'TWCC_DSU_TEMPLATE_MAP_V2';
+    const TEMPLATE_COLOR_KEY = 'TWCC_DSU_TEMPLATE_COLORS_V1';
     const SOUND_SETTINGS_KEY = 'TWCC_DSU_WARNING_SOUND_SETTINGS';
     const AUDIO_HOST_KEY = 'TWCC_DSU_AUDIO_HOST_V1';
     const AUDIO_EVENT_KEY = 'TWCC_DSU_AUDIO_EVENT_V1';
@@ -52,7 +53,13 @@
     const DEFAULT_TEMPLATE_MAP = {
         spear: 'Speer', sword: 'Schwert', axe: 'Fake', archer: 'Bogen', spy: 'Späher',
         light: 'Leichte Kavallerie', marcher: 'Berittener Bogenschütze', heavy: 'Schwere Kavallerie',
-        ram: 'volle off', catapult: 'volle off', knight: 'Paladin', snob: 'AG1', militia: 'Miliz'
+        ram: 'volle off', catapult: 'Fake1', knight: 'Paladin', snob: 'AG1', militia: 'Miliz'
+    };
+
+    const DEFAULT_TEMPLATE_COLORS = {
+        spear: '#4f81bd', sword: '#555555', axe: '#f39c12', archer: '#9b59b6',
+        spy: '#1e88e5', light: '#f1c40f', marcher: '#8e44ad', heavy: '#8b5a2b',
+        ram: '#d32f2f', catapult: '#2eaf4a', knight: '#17a2b8', snob: '#c9a227', militia: '#7f8c8d'
     };
 
     const DEFAULT_SOUND_SETTINGS = { enabled: true, secondsBefore: 60, warningText: 'Piep', beepCount: 2, volume: 0.55, frequency: 880 };
@@ -116,6 +123,27 @@
 
     function setTemplateMap(map) {
         saveJson(TEMPLATE_MAP_KEY, Object.assign({}, DEFAULT_TEMPLATE_MAP, map || {}));
+    }
+
+    function getTemplateColors() {
+        return Object.assign({}, DEFAULT_TEMPLATE_COLORS, loadJson(TEMPLATE_COLOR_KEY, {}));
+    }
+
+    function setTemplateColors(colors) {
+        saveJson(TEMPLATE_COLOR_KEY, Object.assign({}, DEFAULT_TEMPLATE_COLORS, colors || {}));
+    }
+
+    function normalizeHexColor(value, fallback = '#ffffff') {
+        const color = String(value || '').trim();
+        return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+    }
+
+    function readableTextColor(background) {
+        const hex = normalizeHexColor(background, '#ffffff').slice(1);
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return (0.299 * r + 0.587 * g + 0.114 * b) >= 150 ? '#111111' : '#ffffff';
     }
 
     function getCanonicalUnit(unit) {
@@ -1391,6 +1419,7 @@
 
     function renderPreview(plan) {
         const villageMap = loadJson(STORAGE_KEY, {});
+        const templateColors = getTemplateColors();
         const rows = plan.map((p, i) => {
             if (!p.ok) {
                 return `<tr style="background:#ffd6d6;"><td>${p.line}</td><td colspan="11">${escapeHtml(p.raw)}<br><b>${escapeHtml(p.error)}</b></td></tr>`;
@@ -1399,6 +1428,10 @@
             const vid = p.villageId || villageMap[p.from] || '';
             const status = vid ? '✅ gefunden' : '❌ fehlt';
             const template = getTemplateName(p.unit);
+            const unitKey = getCanonicalUnit(p.unit);
+            const unitColor = normalizeHexColor(templateColors[unitKey] || DEFAULT_TEMPLATE_COLORS[unitKey], '#ffffff');
+            const unitTextColor = readableTextColor(unitColor);
+            const unitCellStyle = `background:${unitColor};color:${unitTextColor};font-weight:bold;`;
             const state = (p.status || 'open') + (p.error ? ' · ' + p.error : '');
 
             const rowBg = getRowBgByStatus(p.status);
@@ -1411,8 +1444,8 @@
                 <td>${escapeHtml(p.targetId || '-')}</td>
                 <td>${escapeHtml(p.send)}</td>
                 <td>${escapeHtml(p.arrival || '-')}</td>
-                <td>${escapeHtml(p.unit)}</td>
-                <td>${escapeHtml(template)}</td>
+                <td style="${unitCellStyle}">${escapeHtml(p.unit)}</td>
+                <td style="${unitCellStyle}">${escapeHtml(template)}</td>
                 <td>${renderStatusBadge(p.status, p.error)}</td>
                 <td>${status}</td>
                 <td><button class="twcc-dsu-open" data-index="${i}" ${vid ? '' : 'disabled'}>Dorf öffnen</button></td>
@@ -1518,11 +1551,25 @@
 
         const templateSettings = document.getElementById('twcc-dsu-template-settings');
         const templateMap = getTemplateMap();
-        templateSettings.innerHTML = TEMPLATE_DEFINITIONS.map(def => `
-            <label style="display:flex;justify-content:space-between;gap:6px;align-items:center;">
-                <span>${escapeHtml(def.label)}</span>
-                <input class="twcc-dsu-template-input" data-unit="${escapeHtml(def.key)}" value="${escapeHtml(templateMap[def.key] || '')}" style="width:125px;">
-            </label>`).join('');
+        const templateColors = getTemplateColors();
+        templateSettings.innerHTML = TEMPLATE_DEFINITIONS.map(def => {
+            const color = normalizeHexColor(templateColors[def.key] || DEFAULT_TEMPLATE_COLORS[def.key], '#ffffff');
+            return `
+                <label style="display:grid;grid-template-columns:minmax(110px,1fr) 125px 22px;gap:6px;align-items:center;">
+                    <span>${escapeHtml(def.label)}</span>
+                    <input class="twcc-dsu-template-input" data-unit="${escapeHtml(def.key)}" value="${escapeHtml(templateMap[def.key] || '')}" style="width:125px;box-sizing:border-box;">
+                    <span class="twcc-dsu-color-square" data-unit="${escapeHtml(def.key)}" title="Farbe für ${escapeHtml(def.label)} wählen" style="position:relative;width:18px;height:18px;border:1px solid #5d4528;border-radius:2px;background:${color};cursor:pointer;display:inline-block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);">
+                        <input class="twcc-dsu-template-color" data-unit="${escapeHtml(def.key)}" type="color" value="${color}" aria-label="Farbe für ${escapeHtml(def.label)}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0;">
+                    </span>
+                </label>`;
+        }).join('');
+
+        document.querySelectorAll('.twcc-dsu-template-color').forEach(input => {
+            input.addEventListener('input', () => {
+                const square = input.closest('.twcc-dsu-color-square');
+                if (square) square.style.background = input.value;
+            });
+        });
 
         const soundSettings = getSoundSettings();
         document.getElementById('twcc-dsu-sound-enabled').checked = !!soundSettings.enabled;
@@ -1546,12 +1593,17 @@
         document.getElementById('twcc-dsu-sound-test').onclick = () => { claimAudioHost(); playWarningSoundLocal(collectSoundSettings()); };
         document.getElementById('twcc-dsu-settings-save').onclick = () => {
             const nextMap = {};
+            const nextColors = {};
             document.querySelectorAll('.twcc-dsu-template-input').forEach(input => {
                 nextMap[input.dataset.unit] = input.value.trim();
             });
+            document.querySelectorAll('.twcc-dsu-template-color').forEach(input => {
+                nextColors[input.dataset.unit] = normalizeHexColor(input.value, DEFAULT_TEMPLATE_COLORS[input.dataset.unit] || '#ffffff');
+            });
             setTemplateMap(nextMap);
+            setTemplateColors(nextColors);
             setSoundSettings(collectSoundSettings());
-            toast('Vorlagen und Warnung gespeichert');
+            toast('Vorlagen, Farben und Warnung gespeichert');
             refreshPreview();
         };
 
@@ -1619,6 +1671,7 @@
             localStorage.removeItem(QUEUE_PAUSE_KEY);
             localStorage.removeItem(AUTOMATION_ENABLED_KEY);
             localStorage.removeItem(TEMPLATE_MAP_KEY);
+            localStorage.removeItem(TEMPLATE_COLOR_KEY);
             localStorage.removeItem(SOUND_SETTINGS_KEY);
             localStorage.removeItem(WARNING_FIRED_KEY);
             currentPlan = [];

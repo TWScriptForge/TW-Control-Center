@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TWCC Angriffsplaner
 // @namespace    TWCC
-// @version      1.1.12
+// @version      1.1.14
 // @description  Angriffsplaner mit versteckter Hotkey-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
 // @author       Daniel 
 // @match        https://*.die-staemme.de/game.php*
@@ -33,6 +33,7 @@
     const SOUND_SETTINGS_KEY = 'TWCC_DSU_WARNING_SOUND_SETTINGS';
     const AUDIO_HOST_KEY = 'TWCC_DSU_AUDIO_HOST_V1';
     const AUDIO_EVENT_KEY = 'TWCC_DSU_AUDIO_EVENT_V1';
+    const VILLAGE_NAME_CACHE_KEY = 'TWCC_DSU_VILLAGE_NAMES_V1';
 
     const TEMPLATE_DEFINITIONS = [
         { key: 'spear', label: 'Speer', aliases: ['spear', 'speer'] },
@@ -111,6 +112,109 @@
     function villageIdFromHref(href) {
         const m = String(href || '').match(/[?&]village=(\d+)/);
         return m ? m[1] : '';
+    }
+
+    let VILLAGE_NAME_FETCH_PROMISE = null;
+    let VILLAGE_NAME_LAST_ATTEMPT = 0;
+
+    function getVillageNameCache() {
+        const cache = loadJson(VILLAGE_NAME_CACHE_KEY, {});
+        return {
+            byId: cache && typeof cache.byId === 'object' ? cache.byId : {},
+            byCoord: cache && typeof cache.byCoord === 'object' ? cache.byCoord : {}
+        };
+    }
+
+    function decodeVillageName(value) {
+        try {
+            return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+        } catch (e) {
+            return String(value || '').replace(/\+/g, ' ');
+        }
+    }
+
+    function getVillageDisplayName(attack, side, villageMap, cache) {
+        const isStart = side === 'start';
+        const coord = String(isStart ? attack.from : attack.to || '').trim();
+        const id = String(
+            isStart
+                ? (attack.villageId || villageMap[coord] || '')
+                : (attack.targetId || '')
+        ).trim();
+
+        return cache.byId[id] || cache.byCoord[coord] || id || coord || '-';
+    }
+
+    async function ensureVillageNames(plan) {
+        const attacks = (Array.isArray(plan) ? plan : []).filter(item => item && item.ok);
+        if (!attacks.length) return false;
+
+        const villageMap = loadJson(STORAGE_KEY, {});
+        const cache = getVillageNameCache();
+        const neededIds = new Set();
+        const neededCoords = new Set();
+
+        attacks.forEach(attack => {
+            const startId = String(attack.villageId || villageMap[attack.from] || '').trim();
+            const targetId = String(attack.targetId || '').trim();
+            const startCoord = String(attack.from || '').trim();
+            const targetCoord = String(attack.to || '').trim();
+
+            if (startId && !cache.byId[startId]) neededIds.add(startId);
+            if (targetId && !cache.byId[targetId]) neededIds.add(targetId);
+            if (startCoord && !cache.byCoord[startCoord]) neededCoords.add(startCoord);
+            if (targetCoord && !cache.byCoord[targetCoord]) neededCoords.add(targetCoord);
+        });
+
+        if (!neededIds.size && !neededCoords.size) return false;
+        if (VILLAGE_NAME_FETCH_PROMISE) return VILLAGE_NAME_FETCH_PROMISE;
+
+        // Bei einem Netzwerkfehler nicht bei jedem Live-Refresh erneut laden.
+        if (Date.now() - VILLAGE_NAME_LAST_ATTEMPT < 15000) return false;
+        VILLAGE_NAME_LAST_ATTEMPT = Date.now();
+
+        VILLAGE_NAME_FETCH_PROMISE = (async () => {
+            try {
+                const response = await fetch('/map/village.txt', {
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+
+                const text = await response.text();
+                let changed = false;
+
+                text.split(/\r?\n/).forEach(line => {
+                    if (!line) return;
+                    const parts = line.split(',');
+                    if (parts.length < 4) return;
+
+                    const id = String(parts[0] || '').trim();
+                    const name = decodeVillageName(parts[1]);
+                    const coord = `${String(parts[2] || '').trim()}|${String(parts[3] || '').trim()}`;
+
+                    if (!name) return;
+                    if (neededIds.has(id) && cache.byId[id] !== name) {
+                        cache.byId[id] = name;
+                        changed = true;
+                    }
+                    if (neededCoords.has(coord) && cache.byCoord[coord] !== name) {
+                        cache.byCoord[coord] = name;
+                        changed = true;
+                    }
+                });
+
+                if (changed) saveJson(VILLAGE_NAME_CACHE_KEY, cache);
+                return changed;
+            } catch (e) {
+                log('Dorfnamen konnten nicht geladen werden:', e);
+                return false;
+            } finally {
+                VILLAGE_NAME_FETCH_PROMISE = null;
+            }
+        })();
+
+        return VILLAGE_NAME_FETCH_PROMISE;
     }
 
     function normalizeUnit(unit) {
@@ -1419,6 +1523,7 @@
 
     function renderPreview(plan) {
         const villageMap = loadJson(STORAGE_KEY, {});
+        const villageNameCache = getVillageNameCache();
         const templateColors = getTemplateColors();
         const rows = plan.map((p, i) => {
             if (!p.ok) {
@@ -1433,15 +1538,17 @@
             const unitTextColor = readableTextColor(unitColor);
             const unitCellStyle = `background:${unitColor};color:${unitTextColor};font-weight:bold;`;
             const state = (p.status || 'open') + (p.error ? ' · ' + p.error : '');
+            const startVillageName = getVillageDisplayName(p, 'start', villageMap, villageNameCache);
+            const targetVillageName = getVillageDisplayName(p, 'target', villageMap, villageNameCache);
 
             const rowBg = getRowBgByStatus(p.status);
 
             return `<tr style="${rowBg}">
                 <td>${i + 1}</td>
-                <td>${escapeHtml(p.from)}</td>
-                <td>${escapeHtml(vid)}</td>
-                <td>${escapeHtml(p.to)}</td>
-                <td>${escapeHtml(p.targetId || '-')}</td>
+                <td>${escapeHtml(p.fromName || '-')}</td>
+                <td title="${escapeHtml(vid || p.from)}">${escapeHtml(startVillageName)}</td>
+                <td>${escapeHtml(p.toName || '-')}</td>
+                <td title="${escapeHtml(p.targetId || p.to)}">${escapeHtml(targetVillageName)}</td>
                 <td>${escapeHtml(p.send)}</td>
                 <td>${escapeHtml(p.arrival || '-')}</td>
                 <td style="${unitCellStyle}">${escapeHtml(p.unit)}</td>
@@ -1456,10 +1563,10 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Start</th>
-                    <th>Village-ID</th>
-                    <th>Ziel</th>
-                    <th>Target-ID</th>
+                    <th>Startspieler</th>
+                    <th>Startdorf</th>
+                    <th>Zielspieler</th>
+                    <th>Zieldorf</th>
                     <th>Abschickzeit</th>
                     <th>Ankunft</th>
                     <th>Einheit</th>
@@ -1613,6 +1720,15 @@
             saveJson(PLAN_KEY, currentPlan);
             document.getElementById('twcc-dsu-preview').innerHTML = renderPreview(currentPlan);
 
+            ensureVillageNames(currentPlan).then(changed => {
+                if (changed && document.getElementById('twcc-dsu-p1')?.style.display !== 'none') {
+                    document.getElementById('twcc-dsu-preview').innerHTML = renderPreview(currentPlan);
+                    document.querySelectorAll('.twcc-dsu-open').forEach(btn => {
+                        btn.onclick = () => openPlaceForAttack(currentPlan[parseInt(btn.dataset.index, 10)], false);
+                    });
+                }
+            });
+
             document.querySelectorAll('.twcc-dsu-open').forEach(btn => {
                 btn.onclick = () => openPlaceForAttack(currentPlan[parseInt(btn.dataset.index, 10)], false);
             });
@@ -1672,6 +1788,7 @@
             localStorage.removeItem(AUTOMATION_ENABLED_KEY);
             localStorage.removeItem(TEMPLATE_MAP_KEY);
             localStorage.removeItem(TEMPLATE_COLOR_KEY);
+            localStorage.removeItem(VILLAGE_NAME_CACHE_KEY);
             localStorage.removeItem(SOUND_SETTINGS_KEY);
             localStorage.removeItem(WARNING_FIRED_KEY);
             currentPlan = [];

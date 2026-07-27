@@ -1,6 +1,6 @@
 /**
 
-TWCC Attack Organizer v3.6.1
+TWCC Attack Organizer v3.6.2
 
 Nur „Eintreffend“, frei sortierbare Buttons und explizite Aktion:
 
@@ -259,7 +259,13 @@ function colorRows() {getIncomingRows().each(function () {const $line = $(this);
 
 }
 
-function processRow(line, nr) {if (!isSupport(line)) addButtons(line, nr);}
+function processRow(line, nr) {
+    // In der kombinierten Eingangsübersicht nur die Zeilen färben.
+    // Dort werden bewusst keine Organizer-Buttons eingefügt.
+    if (isOverviewIncomingAttacksPage()) return;
+
+    if (!isSupport(line)) addButtons(line, nr);
+}
 
 function scan() {scheduled = false;cleanupOutsideIncoming();
 
@@ -330,6 +336,6 @@ function destroy() {if (observer) observer.disconnect();observer = null;$(docume
 
 win.TWCC_AttackOrganizerLoaded = true;
 
-win.TWCC_AttackOrganizer = {version: '3.6.1-overview-incomings',init,destroy,refresh: scan};
+win.TWCC_AttackOrganizer = {version: '3.6.2-overview-colors-only',init,destroy,refresh: scan};
 
 if (document.readyState === 'loading') {$(init);} else {init();}})();

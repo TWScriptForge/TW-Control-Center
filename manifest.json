@@ -8,11 +8,11 @@
   "core": {
     "name": "TW Control Center",
     "version": "3.0.0",
-    "url": "https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/modules/TWCC.js"
+    "url": "https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/modules/TWCC.js"
   },
   "assets": {
     "logo": {
-      "url": "https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/assets/twcc-logo.png.gif",
+      "url": "https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/assets/twcc-logo.png.gif",
       "version": "2"
     }
   },
@@ -29,7 +29,7 @@
   "announcements": [
     {
       "enabled": true,
-      "id": "Wilkommen",
+      "id": "Willkommen",
       "version": 9,
       "type": "warning",
       "title": {
@@ -37,8 +37,8 @@
         "en": "⚠ TWCC Welcome"
       },
       "text": {
-        "de": "AP wurde Überarbeitet >>> Statistik eingeführt >>>> Berichte umbenenner drinnen. ",
-        "en": "test"
+        "de": "AP wurde überarbeitet. Die Statistik wurde eingeführt und der Berichte-Umbenenner wurde integriert.",
+        "en": "The AP module was revised. Statistics were added and the report renaming module was integrated."
       },
       "start": "2026-07-22T00:00:00",
       "end": "2027-12-31T23:59:59",

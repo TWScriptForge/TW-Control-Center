@@ -7,13 +7,13 @@
   },
   "core": {
     "name": "TW Control Center",
-    "version": "2.6.1",
+    "version": "3.0.0",
     "url": "https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/modules/TWCC.js"
   },
   "assets": {
     "logo": {
       "url": "https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/assets/twcc-logo.png.gif",
-      "version": "1"
+      "version": "2"
     }
   },
   "modules": {
@@ -30,7 +30,7 @@
     {
       "enabled": true,
       "id": "Wilkommen",
-      "version": 8,
+      "version": 9,
       "type": "warning",
       "title": {
         "de": "⚠ TWCC Willkommen",

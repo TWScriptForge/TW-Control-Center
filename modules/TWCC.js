@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TW Control Center
 // @namespace    http://tampermonkey.net/
-// @version      2.6.0
-// @description  TW Control Center v2.6.0 – Modulbereinigung und sichere Standardzustände
+// @version      2.6.1
+// @description  TW Control Center v2.6.1 – Berichte umbenennen und Dorfnotizen
 // @author       Daniel
 // @match        https://*.die-staemme.de/*
 // @match        https://*.tribalwars.de/*
@@ -30,7 +30,7 @@
     const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     win.TWCC_CoreInfo = Object.freeze({
         name: 'TW Control Center',
-        version: '2.6.0',
+        version: '2.6.1',
         phase: 'theme-engine-live'
     });
     const $ = win.jQuery || win.$;
@@ -42,7 +42,7 @@
 
     $.ajaxSetup({ cache: true });
 
-    const TWCC_VERSION = '2.6.0';
+    const TWCC_VERSION = '2.6.1';
     const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/';
     const MODULE_BASE = GITHUB_RAW_BASE + 'modules/';
 
@@ -79,6 +79,8 @@
             dsUiExtended: { enabled: true, cacheBust: '' },
             dsSelectVillages: { enabled: true, cacheBust: '' },
             attackTimerServerMs: { enabled: false, cacheBust: '' },
+            dsUltimateVerlaeufe: { enabled: false, cacheBust: '' },
+            berichteUmbenennen: { enabled: false, cacheBust: '' },
             korrikarteProfiles: { enabled: true, cacheBust: '' }
         }
     };
@@ -491,6 +493,64 @@
         }
 
         ,
+        dsUltimateVerlaeufe: {
+            id: 'dsUltimateVerlaeufe',
+            name: 'DS Ultimate Verläufe',
+            icon: '📈',
+            category: 'overview',
+            categoryName: 'Übersicht',
+            description: 'Lädt DS Ultimate Verläufe aus der offiziellen Scriptdatenbank.',
+            author: 'mkich / skatecram',
+            version: 'external',
+            source: 'external',
+            loader: 'page',
+            scriptUrl: 'https://media.innogames.com/com_DS_DE/Scriptdatenbank/userscript_main/290_ds-ultimate_verlaeufe_mkich_skatecram.js',
+            started: false,
+            matchesPage() {
+                const hostOk = /(^|\.)die-staemme\.de$/.test(location.hostname) ||
+                               /(^|\.)tribalwars\.de$/.test(location.hostname);
+                return hostOk && location.href.includes('/game.php');
+            },
+            init() {
+                if (this.started) return;
+                if (!this.matchesPage()) {
+                    console.log('[TW Control Center] DS Ultimate Verläufe aktiv, aber nur auf game.php-Seiten geladen.');
+                    return;
+                }
+                this.started = true;
+                loadExternalScript(this.scriptUrl, this.id, this.loader);
+            },
+            openSettings() { createModuleInfoPanel(this); }
+        },
+
+        berichteUmbenennen: {
+            id: 'berichteUmbenennen',
+            name: 'Berichte umbenennen + Dorfnotiz',
+            icon: '📨',
+            category: 'overview',
+            categoryName: 'Übersicht',
+            description: 'Benennt einzelne Berichte um und verarbeitet in der Berichtsübersicht mehrere markierte Berichte inklusive Dorfnotiz.',
+            author: 'Daniel',
+            version: '5.5-external',
+            source: 'external',
+            loader: 'fetch',
+            scriptUrl: MODULE_BASE + 'Berichte-Umbenennen.js',
+            started: false,
+            matchesPage() {
+                return location.href.includes('screen=report');
+            },
+            init() {
+                if (this.started) return;
+                if (!this.matchesPage()) {
+                    console.log('[TW Control Center] Berichte umbenennen aktiv, aber nur auf Berichtsseiten geladen.');
+                    return;
+                }
+                this.started = true;
+                loadExternalScript(this.scriptUrl, this.id, this.loader);
+            },
+            openSettings() { createModuleInfoPanel(this); }
+        },
+
         attackTimerServerMs: {
             id: 'attackTimerServerMs',
             name: 'DS Angriff Timer ServerMS',
@@ -655,6 +715,18 @@
             instructions: `HIER GEHÖRT DEINE ANLEITUNG ZU DS UI ERWEITERT REIN`,
             tips: `HIER GEHÖREN DEINE TIPPS ZU DS UI ERWEITERT REIN`,
             notes: `HIER GEHÖREN WICHTIGE HINWEISE ZU DS UI ERWEITERT REIN`
+        },
+        dsUltimateVerlaeufe: {
+            description: `DS Ultimate Verläufe wird als externes Modul direkt aus der offiziellen Scriptdatenbank geladen.`,
+            instructions: `Modul im TW Control Center aktivieren und anschließend eine Spielseite neu laden. Das externe Script entscheidet selbst, auf welchen Ansichten seine Funktionen angezeigt werden.`,
+            tips: `Bei einer neuen Scriptversion über das Aktualisieren-Symbol des Moduls einen CacheBust auslösen und die Seite neu laden.`,
+            notes: `Das Modul ist standardmäßig deaktiviert. Der Ladeweg „page“ führt das ältere Script im Seitenkontext aus, damit Spielvariablen und vorhandene Seitenbibliotheken erreichbar bleiben.`
+        },
+        berichteUmbenennen: {
+            description: `Das Modul lädt die von uns erstellte Version 5.5 direkt aus deinem GitHub-Repository. Es funktioniert sowohl in einem einzelnen Bericht als auch in der Berichtsübersicht mit mehreren markierten Berichten.`,
+            instructions: `Modul aktivieren und die Berichtsseite neu laden. Im Einzelbericht wird der aktuelle Bericht umbenannt und die Dorfnotiz des gegnerischen Dorfes gespeichert oder überschrieben. In der Berichtsübersicht mehrere Berichte markieren und denselben grünen Button starten.`,
+            tips: `Nach Änderungen an Berichte-Umbenennen.js den Aktualisieren-Button des Moduls verwenden. Dadurch wird der CacheBust gesetzt und anschließend die aktuelle GitHub-Version geladen.`,
+            notes: `Es wird ausschließlich das gemeinsam erstellte Modul verwendet. Die Stapelverarbeitung bleibt auf der Übersicht und arbeitet die markierten Berichte nacheinander über einen unsichtbaren Worker ab.`
         },
         attackTimerServerMs: {
             description: `HIER GEHÖRT DEINE BESCHREIBUNG ZUM DS ANGRIFF TIMER SERVERMS REIN`,

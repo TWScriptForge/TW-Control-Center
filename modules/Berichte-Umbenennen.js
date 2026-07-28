@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Die Stämme - Berichte Umbenennen + Dorfnotiz V5.5
+// @name         Die Stämme - Berichte Umbenennen + Dorfnotiz V5.6
 // @namespace    http://tampermonkey.net/
-// @version      5.5
+// @version      5.6
 // @description  Benennt einzelne oder markierte Berichte stabil nacheinander um und überschreibt die zugehörige Dorfnotiz
 // @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
@@ -9,7 +9,7 @@
 // @grant        none
 // ==/UserScript==
 
-window.addEventListener('DOMContentLoaded', () => {
+function initBerichteUmbenennenUndDorfnotiz() {
     'use strict';
 
     const STORAGE_KEY = 'ds_report_rename_account_name_v50';
@@ -903,4 +903,10 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         }
     }, 500);
-});
+}
+
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', initBerichteUmbenennenUndDorfnotiz, { once: true });
+} else {
+    initBerichteUmbenennenUndDorfnotiz();
+}

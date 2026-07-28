@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         TW Control Center
 // @namespace    http://tampermonkey.net/
-// @version      2.6.1
-// @description  TW Control Center v2.6.1 – Berichte umbenennen und Dorfnotizen
-// @author       Daniel
+// @version      3.0.0
+// @description  TW Control Center 3.0.0 – modulare Basis von TWScriptForge
+// @author       TWScriptForge
 // @match        https://*.die-staemme.de/*
 // @match        https://*.tribalwars.de/*
 // @run-at       document-end
@@ -30,7 +30,7 @@
     const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     win.TWCC_CoreInfo = Object.freeze({
         name: 'TW Control Center',
-        version: '2.6.1',
+        version: '3.0.0',
         phase: 'theme-engine-live'
     });
     const $ = win.jQuery || win.$;
@@ -42,8 +42,8 @@
 
     $.ajaxSetup({ cache: true });
 
-    const TWCC_VERSION = '2.6.1';
-    const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/';
+    const TWCC_VERSION = '3.0.0';
+    const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/';
     const MODULE_BASE = GITHUB_RAW_BASE + 'modules/';
 
     const CORE_KEY = 'TW_TOOLBOX_CORE_V1';
@@ -78,9 +78,10 @@
             attackOrganizer: { enabled: true, cacheBust: '' },
             dsUiExtended: { enabled: true, cacheBust: '' },
             dsSelectVillages: { enabled: true, cacheBust: '' },
-            attackTimerServerMs: { enabled: false, cacheBust: '' },
+        attackTimerServerMs: { enabled: false, cacheBust: '' },
             dsUltimateVerlaeufe: { enabled: false, cacheBust: '' },
             berichteUmbenennen: { enabled: false, cacheBust: '' },
+            premiumDepotQuickButtons: { enabled: false, cacheBust: '' },
             korrikarteProfiles: { enabled: true, cacheBust: '' }
         }
     };
@@ -248,7 +249,7 @@
             category: 'troopMovement',
             categoryName: 'Truppenbewegung',
             description: 'Lädt den FakeGenerator extern aus GitHub/jsDelivr. Standardmäßig AUS. Konflikt mit FarmGod Extern.',
-            author: 'Daniel / SaveBank',
+            author: 'TWScriptForge / SaveBank',
             version: '2.3.7-external',
             source: 'external',
             loader: 'fetch',
@@ -276,7 +277,7 @@
             category: 'troopMovement',
             categoryName: 'Truppenbewegung',
             description: 'DS-Ultimate BBCode importieren, Angriffe vorbereiten und mit Timing/Auto-Kalibrierung senden.',
-            author: 'Daniel',
+            author: 'TWScriptForge',
             version: '1.0-external',
             source: 'external',
             loader: 'fetch',
@@ -399,7 +400,7 @@
             category: 'attack',
             categoryName: 'Angriff',
             description: 'Lädt FarmGod extern aus GitHub/jsDelivr. FarmGod bleibt außerhalb vom Master und kann separat bearbeitet werden.',
-            author: 'Daniel / Warre',
+            author: 'TWScriptForge / Warre',
             version: '1.5.4-external',
             source: 'external',
             loader: 'pageBlob',
@@ -530,7 +531,7 @@
             category: 'overview',
             categoryName: 'Übersicht',
             description: 'Benennt einzelne Berichte um und verarbeitet in der Berichtsübersicht mehrere markierte Berichte inklusive Dorfnotiz.',
-            author: 'Daniel',
+            author: 'TWScriptForge',
             version: '5.5-external',
             source: 'external',
             loader: 'fetch',
@@ -549,6 +550,38 @@
                 loadExternalScript(this.scriptUrl, this.id, this.loader);
             },
             openSettings() { createModuleInfoPanel(this); }
+        },
+
+
+        premiumDepotQuickButtons: {
+            id: 'premiumDepotQuickButtons',
+            name: 'Premium-Depot Quick Buttons',
+            icon: '💰',
+            category: 'premium',
+            categoryName: 'Premium',
+            description: 'Frei konfigurierbare Kauf-Buttons für Holz, Lehm und Eisen im Premium-Depot inklusive MAX, Custom und optionaler Auto-Bestätigung.',
+            author: 'achilles88 / TWScriptForge',
+            version: '4.0.0-external',
+            source: 'external',
+            loader: 'fetch',
+            scriptUrl: MODULE_BASE + 'Premium-Depot-Quick-Buttons.js',
+            started: false,
+            matchesPage() {
+                const params = new URLSearchParams(location.search);
+                return params.get('mode') === 'exchange';
+            },
+            init() {
+                if (this.started) return;
+                if (!this.matchesPage()) {
+                    console.log('[TW Control Center] Premium-Depot Quick Buttons aktiv, aber nur im Premium-Depot geladen.');
+                    return;
+                }
+                this.started = true;
+                loadExternalScript(this.scriptUrl, this.id, this.loader);
+            },
+            openSettings() {
+                createPremiumDepotSettingsPanel();
+            }
         },
 
         attackTimerServerMs: {
@@ -610,7 +643,7 @@
             category: 'map',
             categoryName: 'Karte',
             description: 'Weltabhängige Korrikarten verwalten, ersetzen und ausführen. Pro Welt wird ein eigenes Profil gespeichert.',
-            author: 'Shinko to Kuma, suilenroc, Daniel',
+            author: 'Shinko to Kuma, suilenroc, TWScriptForge',
             version: '0.6',
             source: 'internal',
             started: false,
@@ -727,6 +760,13 @@
             instructions: `Modul aktivieren und die Berichtsseite neu laden. Im Einzelbericht wird der aktuelle Bericht umbenannt und die Dorfnotiz des gegnerischen Dorfes gespeichert oder überschrieben. In der Berichtsübersicht mehrere Berichte markieren und denselben grünen Button starten.`,
             tips: `Nach Änderungen an Berichte-Umbenennen.js den Aktualisieren-Button des Moduls verwenden. Dadurch wird der CacheBust gesetzt und anschließend die aktuelle GitHub-Version geladen.`,
             notes: `Es wird ausschließlich das gemeinsam erstellte Modul verwendet. Die Stapelverarbeitung bleibt auf der Übersicht und arbeitet die markierten Berichte nacheinander über einen unsichtbaren Worker ab.`
+        },
+
+        premiumDepotQuickButtons: {
+            description: `Fügt direkt bei den BUY-Feldern im Premium-Depot frei konfigurierbare Quick Buttons ein. Jeder Klick bleibt fest an Holz, Lehm oder Eisen gebunden.`,
+            instructions: `Modul aktivieren und das Premium-Depot öffnen. Unter Einstellungen können Buttons hinzugefügt, gelöscht, verschoben, ein- oder ausgeblendet sowie Text, Typ und Wert geändert werden.`,
+            tips: `Strg + Alt + B schaltet die Auto-Bestätigung dauerhaft ein oder aus. Strg + Alt + I zeigt den Status. Strg + Alt + D schaltet Debug-Markierungen ein oder aus.`,
+            notes: `Die Auto-Bestätigung wird ausschließlich unmittelbar nach einem Klick auf einen Quick Button ausgeführt. Einstellungen werden lokal pro Spiel-Domain gespeichert.`
         },
         attackTimerServerMs: {
             description: `HIER GEHÖRT DEINE BESCHREIBUNG ZUM DS ANGRIFF TIMER SERVERMS REIN`,
@@ -1066,7 +1106,7 @@
         .twcc-theme-preview-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
         .twcc-theme-editor-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
 
-        /* v2.5.3 UI Polish */
+        /* TWCC UI Polish */
         .twx-panel,
         #twx-master-panel,
         #tw-arrival-panel,
@@ -1957,7 +1997,7 @@
                             <section class="twcc-settings-page" data-twcc-page-content="general">
                                 <h3 style="margin-top:0;">Allgemein</h3>
                                 <div class="twcc-general-brand">
-                                    <img class="twcc-general-logo" src="https://raw.githubusercontent.com/morzingerdaniel-dev/TW-Control-Center/main/assets/twcc-logo.png.gif" alt="TWCC Logo">
+                                    <img class="twcc-general-logo" src="${GITHUB_RAW_BASE}assets/twcc-logo.png.gif" alt="TWCC Logo">
                                     <div class="twcc-general-title">TW Control Center</div>
                                     <div class="twcc-general-version">Version ${escapeHtml(TWCC_VERSION)} · Modular Control Center for Tribal Wars</div>
                                 </div>
@@ -1970,7 +2010,7 @@
                             <section class="twcc-settings-page" data-twcc-page-content="about">
                                 <h3 style="margin-top:0;">Über</h3>
                                 <div class="twcc-theme-card">
-                                    <b>TW Control Center v2.5.3</b><br>
+                                    <b>TW Control Center v${escapeHtml(TWCC_VERSION)}</b><br>
                                     Custom Theme Editor – Live-Vorschau, Import und Export
                                 </div>
                             </section>
@@ -2279,7 +2319,7 @@
         panel.style.top = (core.panel.top ?? 100) + 'px';
         panel.innerHTML = `
             <div class="twx-header" id="twx-master-header">
-                <span>⚔ TW Control Center <span style="opacity:.75;font-size:11px;">v2.5.3</span></span>
+                <span>⚔ TW Control Center <span style="opacity:.75;font-size:11px;">v${escapeHtml(TWCC_VERSION)}</span></span>
                 <span class="twcc-header-actions">
                     <button class="twx-btn twcc-header-icon" id="twx-master-settings" title="TWCC Einstellungen">⚙</button>
                     <button class="twx-btn twcc-header-icon" id="twx-master-minimize" title="Control Center minimieren">−</button>
@@ -3391,6 +3431,159 @@
     function twccInfoValue(info, key, fallback) {
         const value = String(info?.[key] ?? '').trim();
         return value || fallback;
+    }
+
+
+    function createPremiumDepotSettingsPanel() {
+        const STORAGE_KEY = 'twcc-premium-depot-quick-buttons:buttons';
+        const DEFAULTS = [
+            { id: '250k', label: '250k', type: 'fixed', value: 250000, enabled: true },
+            { id: '350k', label: '350k', type: 'fixed', value: 350000, enabled: true },
+            { id: '70k', label: '70k', type: 'fixed', value: 70000, enabled: true },
+            { id: 'custom', label: 'Custom', type: 'custom', value: null, enabled: true },
+            { id: 'max', label: 'MAX', type: 'max', value: null, enabled: true }
+        ];
+
+        const readButtons = () => {
+            try {
+                const value = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                return Array.isArray(value) && value.length ? value : JSON.parse(JSON.stringify(DEFAULTS));
+            } catch (_) {
+                return JSON.parse(JSON.stringify(DEFAULTS));
+            }
+        };
+
+        let buttons = readButtons();
+
+        const panel = ToolboxCore.Window.create({
+            id: 'premium-depot-quick-buttons-settings',
+            title: '💰 Premium-Depot Quick Buttons',
+            width: 790,
+            height: 560,
+            render(body) {
+                body.innerHTML = `
+                    <div class="twcc-theme-card">
+                        <b>Button-Verwaltung</b>
+                        <p class="twcc-settings-note">
+                            Diese Vorlagen erscheinen getrennt bei Holz, Lehm und Eisen. Jeder Button schreibt nur in das zugehörige BUY-Feld.
+                        </p>
+                        <div id="pdq-settings-list"></div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                            <button class="twx-btn" id="pdq-settings-add">➕ Button hinzufügen</button>
+                            <button class="twx-btn" id="pdq-settings-save">💾 Speichern</button>
+                            <button class="twx-btn" id="pdq-settings-reset">↩ Standard</button>
+                        </div>
+                    </div>
+                    </div>`;
+
+                const list = body.querySelector('#pdq-settings-list');
+
+                const renderRows = () => {
+                    list.innerHTML = buttons.map((button, index) => `
+                        <div class="pdq-setting-row" data-index="${index}" style="display:grid;grid-template-columns:42px minmax(100px,1fr) 120px minmax(110px,1fr) 36px 36px 36px;gap:6px;align-items:center;margin-top:7px;">
+                            <label style="text-align:center;" title="Sichtbar">
+                                <input class="pdq-enabled" type="checkbox" ${button.enabled !== false ? 'checked' : ''}>
+                            </label>
+                            <input class="twx-input pdq-label" value="${escapeHtml(button.label || '')}" placeholder="Button-Text">
+                            <select class="twx-select pdq-type">
+                                <option value="fixed" ${button.type === 'fixed' ? 'selected' : ''}>Fester Wert</option>
+                                <option value="custom" ${button.type === 'custom' ? 'selected' : ''}>Custom</option>
+                                <option value="max" ${button.type === 'max' ? 'selected' : ''}>MAX</option>
+                            </select>
+                            <input class="twx-input pdq-value" type="number" min="1" step="1"
+                                   value="${button.type === 'fixed' && button.value ? Number(button.value) : ''}"
+                                   placeholder="Wert">
+                            <button class="twx-btn pdq-up" title="Nach oben">↑</button>
+                            <button class="twx-btn pdq-down" title="Nach unten">↓</button>
+                            <button class="twx-btn pdq-delete" title="Löschen">✕</button>
+                        </div>
+                    `).join('');
+
+                    list.querySelectorAll('.pdq-setting-row').forEach(row => {
+                        const index = Number(row.dataset.index);
+                        const type = row.querySelector('.pdq-type');
+                        const value = row.querySelector('.pdq-value');
+                        const syncValueState = () => {
+                            value.disabled = type.value !== 'fixed';
+                            if (value.disabled) value.value = '';
+                        };
+                        type.addEventListener('change', syncValueState);
+                        syncValueState();
+
+                        row.querySelector('.pdq-up').addEventListener('click', () => {
+                            if (index <= 0) return;
+                            [buttons[index - 1], buttons[index]] = [buttons[index], buttons[index - 1]];
+                            renderRows();
+                        });
+                        row.querySelector('.pdq-down').addEventListener('click', () => {
+                            if (index >= buttons.length - 1) return;
+                            [buttons[index + 1], buttons[index]] = [buttons[index], buttons[index + 1]];
+                            renderRows();
+                        });
+                        row.querySelector('.pdq-delete').addEventListener('click', () => {
+                            buttons.splice(index, 1);
+                            renderRows();
+                        });
+                    });
+                };
+
+                const collectRows = () => {
+                    const next = [];
+                    list.querySelectorAll('.pdq-setting-row').forEach((row, index) => {
+                        const label = row.querySelector('.pdq-label').value.trim();
+                        const type = row.querySelector('.pdq-type').value;
+                        const rawValue = Number(row.querySelector('.pdq-value').value);
+                        if (!label) return;
+                        if (type === 'fixed' && (!Number.isFinite(rawValue) || rawValue <= 0)) return;
+                        next.push({
+                            id: `button-${Date.now()}-${index}`,
+                            label,
+                            type,
+                            value: type === 'fixed' ? Math.floor(rawValue) : null,
+                            enabled: row.querySelector('.pdq-enabled').checked
+                        });
+                    });
+                    return next;
+                };
+
+                body.querySelector('#pdq-settings-add').addEventListener('click', () => {
+                    buttons = collectRows();
+                    buttons.push({
+                        id: `button-${Date.now()}`,
+                        label: 'Neu',
+                        type: 'fixed',
+                        value: 100000,
+                        enabled: true
+                    });
+                    renderRows();
+                });
+
+                body.querySelector('#pdq-settings-save').addEventListener('click', () => {
+                    const next = collectRows();
+                    if (!next.length) {
+                        if (typeof UI !== 'undefined' && UI.ErrorMessage) UI.ErrorMessage('Mindestens ein gültiger Button ist erforderlich.');
+                        return;
+                    }
+                    buttons = next;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(buttons));
+                    try {
+                        const api = win['twcc-premium-depot-quick-buttons'];
+                        if (api && typeof api.refresh === 'function') api.refresh();
+                    } catch (_) {}
+                    if (typeof UI !== 'undefined' && UI.SuccessMessage) UI.SuccessMessage('Premium-Depot Buttons gespeichert.');
+                });
+
+                body.querySelector('#pdq-settings-reset').addEventListener('click', () => {
+                    buttons = JSON.parse(JSON.stringify(DEFAULTS));
+                    renderRows();
+                });
+
+                renderRows();
+            }
+        });
+
+        ToolboxCore.Window.toggle('premium-depot-quick-buttons-settings', true);
+        return panel;
     }
 
     function createModuleInfoPanel(mod) {

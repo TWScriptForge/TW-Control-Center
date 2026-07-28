@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         TWCC Angriffsplaner
 // @namespace    TWCC
-// @version      1.1.14
+// @version      1.1.15
 // @description  Angriffsplaner mit versteckter Hotkey-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
-// @author       Daniel 
+// @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
 // @match        https://*.tribalwars.net/game.php*
 // @match        https://*.tribalwars.*/*game.php*
@@ -2323,6 +2323,58 @@
         }, waitMs);
     }
 
+    function getCurrentArrivalInfo() {
+        const container = document.getElementById('date_arrival');
+        if (!container) return { text: '-', timestamp: null };
+
+        const span = container.querySelector('span[data-endtime], span');
+        const endtime = Number(span?.dataset?.endtime);
+
+        if (Number.isFinite(endtime) && endtime > 0) {
+            const timestamp = endtime * 1000;
+            return { text: formatFullDateTime(timestamp), timestamp };
+        }
+
+        const text = String(container.textContent || '')
+            .replace(/\s+/g, ' ')
+            .replace(/^.*?(Ankunft|Arrival)\s*:?\s*/i, '')
+            .trim();
+
+        return { text: text || '-', timestamp: null };
+    }
+
+    function formatFullDateTime(ms) {
+        if (!Number.isFinite(ms)) return '-';
+        const d = new Date(ms);
+        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+    }
+
+    function updateTimingProgressBar(nowServer, clickMs) {
+        const bar = document.getElementById('twcc-dsu-ms-bar-fill');
+        const label = document.getElementById('twcc-dsu-ms-bar-label');
+        if (!bar || !label || !Number.isFinite(nowServer)) return;
+
+        const serverMs = ((Math.round(nowServer) % 1000) + 1000) % 1000;
+        bar.style.width = `${Math.max(0, Math.min(100, serverMs / 10))}%`;
+
+        let background = '#f39c12';
+        let phase = 'Wartefenster';
+
+        if (Number.isFinite(clickMs)) {
+            const remaining = clickMs - nowServer;
+            if (remaining >= 0 && remaining <= 1000) {
+                background = '#2eaf4a';
+                phase = 'Perfektes Klickfenster';
+            } else if (remaining < 0) {
+                background = '#d32f2f';
+                phase = 'Zeitpunkt überschritten';
+            }
+        }
+
+        bar.style.background = background;
+        label.textContent = `${phase} · Server-MS ${pad(serverMs, 3)}`;
+    }
+
     function buildAngriffsplanerPanel(active) {
         let panel = document.getElementById('twcc-dsu-executor');
         if (!panel) {
@@ -2355,6 +2407,14 @@
                         <div><b>Vorlage:</b> <span id="twcc-dsu-exec-template">-</span></div>
                         <div><b>Abschicken Import:</b> <span id="twcc-dsu-exec-send">-</span></div>
                         <div><b>Zielzeit:</b> <span id="twcc-dsu-exec-target">-</span></div>
+                        <div><b>Geplante Ankunft:</b> <span id="twcc-dsu-exec-arrival-planned">-</span></div>
+                        <div id="twcc-dsu-exec-arrival-current-row" style="margin:4px -4px;padding:4px;border-radius:4px;background:#d9f7d9;border:1px solid #77b877;">
+                            <b>Ankunft aktuell:</b> <span id="twcc-dsu-exec-arrival-current">-</span>
+                        </div>
+                        <div style="position:relative;height:22px;margin:7px 0 5px;background:#777;border:1px solid #4e3b27;border-radius:4px;overflow:hidden;">
+                            <div id="twcc-dsu-ms-bar-fill" style="height:100%;width:0%;background:#f39c12;transition:width 35ms linear,background-color 80ms linear;"></div>
+                            <div id="twcc-dsu-ms-bar-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;text-shadow:0 1px 2px #000;">Wartefenster</div>
+                        </div>
                         <div><b>MS-Modus:</b> <span id="twcc-dsu-exec-msmode">-</span></div>
                         <div><b>Klick geplant:</b> <span id="twcc-dsu-exec-click">-</span></div>
                         <div><b>Serverzeit:</b> <span id="twcc-dsu-exec-server">-</span></div>
@@ -2453,6 +2513,19 @@
             document.getElementById('twcc-dsu-exec-template').textContent = activeNow.templateName || getTemplateName(activeNow.unit);
             document.getElementById('twcc-dsu-exec-send').textContent = activeNow.send || '-';
             document.getElementById('twcc-dsu-exec-target').textContent = timing ? timing.dateDisplay : '-';
+
+            const currentArrival = getCurrentArrivalInfo();
+            document.getElementById('twcc-dsu-exec-arrival-planned').textContent = String(activeNow.arrival || '').trim() || '-';
+            document.getElementById('twcc-dsu-exec-arrival-current').textContent = currentArrival.text;
+
+            const arrivalRow = document.getElementById('twcc-dsu-exec-arrival-current-row');
+            if (arrivalRow) {
+                arrivalRow.style.background = currentArrival.text !== '-' ? '#d9f7d9' : '#eeeeee';
+                arrivalRow.style.borderColor = currentArrival.text !== '-' ? '#77b877' : '#aaaaaa';
+            }
+
+            updateTimingProgressBar(now, timing ? timing.clickMs : NaN);
+
             document.getElementById('twcc-dsu-exec-msmode').textContent = timing ? (timing.explicitMs ? 'aus Import' : 'Standard .' + pad(timing.ms, 3)) : '-';
             document.getElementById('twcc-dsu-exec-click').textContent = timing ? `${formatServerTime(timing.clickMs)} (${timing.offset >= 0 ? '+' : ''}${timing.offset} ms)` : '-';
             document.getElementById('twcc-dsu-exec-server').textContent = formatServerTime(now);

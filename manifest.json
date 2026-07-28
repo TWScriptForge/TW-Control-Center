@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 4.1,
   "channel": "stable",
   "loader": {
     "version": "2.7.0",
@@ -13,16 +13,16 @@
   "assets": {
     "logo": {
       "url": "https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/assets/twcc-logo.png.gif",
-      "version": "2"
+      "version": "3"
     }
   },
   "modules": {
     "AttackOrganizer": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "enabled": true
     },
     "Fakegenerator": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "enabled": true
     }
   },
@@ -30,7 +30,7 @@
     {
       "enabled": true,
       "id": "Willkommen",
-      "version": 9,
+      "version": 9.5,
       "type": "warning",
       "title": {
         "de": "⚠ TWCC Willkommen",
@@ -44,7 +44,7 @@
       "end": "2027-12-31T23:59:59",
       "showOnce": false,
       "requireConfirmation": false,
-      "displayTime": 12
+      "displayTime": 10
     }
   ]
 }

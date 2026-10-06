@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TWCC Angriffsplaner
 // @namespace    TWCC
-// @version      1.1.16
+// @version      1.1.17
 // @description  Angriffsplaner mit sichtbarer, separat schaltbarer TWCC-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
 // @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
@@ -308,19 +308,30 @@
             clearPhase2Timer?.();
             return false;
         }
+        // Zustand zuerst speichern und die UI sofort informieren. So zeigt der Button
+        // AN/AUS auch dann korrekt an, wenn ein nachgelagerter Queue-Schritt fehlschlägt.
         localStorage.setItem(AUTOMATION_ENABLED_KEY, value ? '1' : '0');
-        if (value) {
-            setQueueRunning(true);
-            setQueuePaused(false);
-            markExpiredAttacks();
-            claimAudioHost();
-            queueTick('hotkey-enable');
-        } else {
-            setQueueRunning(false);
-            setQueuePaused(false);
-            clearPhase2Timer?.();
+        try {
+            window.dispatchEvent(new CustomEvent('twcc-angriffsplaner-automation-change', { detail: { enabled: !!value } }));
+        } catch (e) {}
+
+        try {
+            if (value) {
+                setQueueRunning(true);
+                setQueuePaused(false);
+                markExpiredAttacks();
+                claimAudioHost();
+                setTimeout(() => queueTick('ui-enable'), 0);
+            } else {
+                setQueueRunning(false);
+                setQueuePaused(false);
+                clearPhase2Timer?.();
+            }
+        } catch (e) {
+            console.error('[TWCC Angriffsplaner] Automatik-Folgeschritt fehlgeschlagen', e);
         }
         if (showMessage) toast(value ? 'Automatik aktiviert' : 'Automatik deaktiviert');
+        return isAutomationEnabled();
     }
 
     function toggleAutomation() {
@@ -1642,7 +1653,7 @@
                 ${hasAutomationPermission() ? `
                 <div id="twcc-dsu-automation-box" style="background:#ead3a2;border:1px solid #8b6b3f;border-radius:6px;padding:8px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                     <b>🤖 Automatik:</b>
-                    <button id="twcc-dsu-automation-toggle" type="button">AUS</button>
+                    <button id="twcc-dsu-automation-toggle" type="button">🤖 Automatik: AUS</button>
                     <span id="twcc-dsu-automation-info" style="font-size:11px;">Automatische Abarbeitung ist ausgeschaltet.</span>
                 </div>` : ''}
 
@@ -1716,7 +1727,7 @@
             const allowed = hasAutomationPermission();
             const enabled = allowed && isAutomationEnabled();
             if (btn) {
-                btn.textContent = enabled ? 'AN' : 'AUS';
+                btn.textContent = enabled ? '🤖 Automatik: AN' : '🤖 Automatik: AUS';
                 btn.title = enabled ? 'Automatik ausschalten' : 'Automatik einschalten';
                 btn.style.fontWeight = 'bold';
             }
@@ -1733,10 +1744,12 @@
         const automationToggle = document.getElementById('twcc-dsu-automation-toggle');
         if (automationToggle) {
             automationToggle.onclick = () => {
-                setAutomationEnabled(!isAutomationEnabled(), true);
+                const next = !isAutomationEnabled();
+                setAutomationEnabled(next, true);
                 refreshAutomationUi();
             };
         }
+        window.addEventListener('twcc-angriffsplaner-automation-change', refreshAutomationUi);
         refreshAutomationUi();
 
         function collectSoundSettings() {

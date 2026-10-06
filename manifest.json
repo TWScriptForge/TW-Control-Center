@@ -1,19 +1,19 @@
 {
-  "schemaVersion": 4.1,
+  "schemaVersion": 3.1.0,
   "channel": "stable",
   "loader": {
-    "version": "2.7.0",
-    "minimumVersion": "2.7.0"
+    "version": "3.1.0",
+    "minimumVersion": "3.1.0"
   },
   "core": {
     "name": "TW Control Center",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "url": "https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/modules/TWCC.js"
   },
   "assets": {
     "logo": {
       "url": "https://raw.githubusercontent.com/TWScriptForge/TW-Control-Center/main/assets/twcc-logo.png.gif",
-      "version": "3"
+      "version": "4"
     }
   },
   "modules": {

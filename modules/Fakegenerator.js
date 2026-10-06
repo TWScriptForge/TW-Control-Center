@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Fake Generator Local Controlled
 // @namespace    https://github.com/Daniel/FakeGenerator
-// @version      2.3.8-local-controlled-autoclose
-// @description  Lokale Version mit Aktivieren/Deaktivieren, Tab-Sperre und Auto-Close nach Fake-Senden
+// @version      2.3.9-twcc-automation-toggle
+// @description  TWCC-Testversion mit getrennt schaltbarer Versand-Automatik und Auto-Close
 // @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
 // @match        https://*.tribalwars.net/game.php*
@@ -18,6 +18,7 @@
         lockedTabKey: 'fg_local_wrapper_locked_tab',
         tabIdKey: 'fg_local_wrapper_this_tab_id',
         panelId: 'fg-local-control-panel',
+        automationKey: 'fg_twcc_send_automation_enabled',
     };
 
     function getTabId() {
@@ -49,6 +50,30 @@
     function isThisTabAllowed() {
         const locked = getLockedTab();
         return !locked || locked === getTabId();
+    }
+
+    function isSendAutomationEnabled() {
+        // Sicherheitsprinzip: Automatik ist standardmäßig AUS und muss bewusst aktiviert werden.
+        return localStorage.getItem(WRAPPER.automationKey) === 'true';
+    }
+
+    function setSendAutomationEnabled(value) {
+        localStorage.setItem(WRAPPER.automationKey, value ? 'true' : 'false');
+    }
+
+    function updateSendAutomationButton() {
+        const btn = document.getElementById('fgSendAutomationToggle');
+        const status = document.getElementById('fgSendAutomationStatus');
+        if (!btn) return;
+        const enabled = isSendAutomationEnabled();
+        btn.textContent = enabled ? '🤖 Automatischer Versand: AN' : '🤖 Automatischer Versand: AUS';
+        btn.classList.toggle('btn-confirm-yes', enabled);
+        btn.classList.toggle('btn-confirm-no', !enabled);
+        if (status) {
+            status.textContent = enabled
+                ? 'Angriff und Bestätigung werden in den geöffneten Fake-Tabs automatisch ausgelöst; danach wird der Tab geschlossen.'
+                : 'Die Angriffstabs werden nur geöffnet. Angriff und Bestätigung bleiben manuell.';
+        }
     }
 
     function runPlaceEnterAutomation() {
@@ -267,7 +292,12 @@
     // Die Tab-Sperre wird hier bewusst ignoriert, damit es auf allen neu geöffneten Tabs läuft.
     if (fgScreen === 'place') {
         console.info('[Fake Generator Local Controlled] Angriffs-Tab erkannt: Originalscript wird hier nicht gestartet.');
-        runPlaceEnterAutomation();
+        if (isSendAutomationEnabled()) {
+            console.info('[Fake Generator Local Controlled] Automatischer Versand ist AN.');
+            runPlaceEnterAutomation();
+        } else {
+            console.info('[Fake Generator Local Controlled] Automatischer Versand ist AUS – Tab bleibt zur manuellen Bestätigung offen.');
+        }
         return;
     }
 
@@ -2362,6 +2392,13 @@ var scriptConfig = {
                 </fieldset>
             </div>
             <div class="ra-mb10">
+                <fieldset class="sb-fieldset" id="fgAutomationFieldset">
+                    <legend>TWCC Versand-Automatik</legend>
+                    <button type="button" id="fgSendAutomationToggle" class="btn"></button>
+                    <div id="fgSendAutomationStatus" style="margin-top:7px;font-size:11px;line-height:1.35;"></div>
+                </fieldset>
+            </div>
+            <div class="ra-mb10">
                 <a href="javascript:void(0);" id="calculateFakes" class="btn btn-confirm-yes onclick="">
                     ${twSDK.tt('Calculate Fakes')}
                 </a>
@@ -2539,10 +2576,26 @@ var scriptConfig = {
             'fake-generator',
             style
         );
+        updateSendAutomationButton();
     }
 
     // Add event handlers and data storage and value initialization
     function addEventHandlers() {
+        jQuery('#fgSendAutomationToggle').off('click.twccFgAutomation').on('click.twccFgAutomation', function (e) {
+            e.preventDefault();
+            setSendAutomationEnabled(!isSendAutomationEnabled());
+            updateSendAutomationButton();
+            try {
+                if (window.UI && UI.InfoMessage) {
+                    UI.InfoMessage(isSendAutomationEnabled()
+                        ? 'FakeGenerator: Automatischer Versand aktiviert.'
+                        : 'FakeGenerator: Automatischer Versand deaktiviert.');
+                }
+            } catch (err) {}
+        });
+
+        updateSendAutomationButton();
+
         // For the Group select menu
         jQuery('#GroupsFilter').on('change', function (e) {
             if (DEBUG) {

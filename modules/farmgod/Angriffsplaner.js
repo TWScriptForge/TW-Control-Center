@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TWCC Angriffsplaner
 // @namespace    TWCC
-// @version      1.1.15
-// @description  Angriffsplaner mit versteckter Hotkey-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
+// @version      1.1.16
+// @description  Angriffsplaner mit sichtbarer, separat schaltbarer TWCC-Automatik, Übergabe-Export, Vorlagen-Mapping und Sprachwarnung
 // @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
 // @match        https://*.tribalwars.net/game.php*
@@ -34,6 +34,30 @@
     const AUDIO_HOST_KEY = 'TWCC_DSU_AUDIO_HOST_V1';
     const AUDIO_EVENT_KEY = 'TWCC_DSU_AUDIO_EVENT_V1';
     const VILLAGE_NAME_CACHE_KEY = 'TWCC_DSU_VILLAGE_NAMES_V1';
+
+    // TWCC-Rechtevorbereitung:
+    // Solange die zentrale Rechteverwaltung noch nicht aktiv ist, darf die Testversion
+    // die Automatik anzeigen. Sobald TWCC einen Permission-Provider bereitstellt,
+    // entscheidet ausschließlich `angriffsplaner.automation` über Sichtbarkeit/Nutzung.
+    const AUTOMATION_CAPABILITY = 'angriffsplaner.automation';
+
+    function hasAutomationPermission() {
+        try {
+            if (typeof window.TWCC_HasPermission === 'function') {
+                return !!window.TWCC_HasPermission(AUTOMATION_CAPABILITY);
+            }
+            if (window.TWCC?.permissions && typeof window.TWCC.permissions.has === 'function') {
+                return !!window.TWCC.permissions.has(AUTOMATION_CAPABILITY);
+            }
+            if (window.TWCC_PERMISSIONS && Object.prototype.hasOwnProperty.call(window.TWCC_PERMISSIONS, AUTOMATION_CAPABILITY)) {
+                return !!window.TWCC_PERMISSIONS[AUTOMATION_CAPABILITY];
+            }
+        } catch (e) {
+            console.warn('[TWCC Angriffsplaner] Permission-Prüfung fehlgeschlagen', e);
+            return false;
+        }
+        return true; // Testbetrieb bis zur zentralen TWCC/Supabase-Anbindung
+    }
 
     const TEMPLATE_DEFINITIONS = [
         { key: 'spear', label: 'Speer', aliases: ['spear', 'speer'] },
@@ -273,10 +297,17 @@
     }
 
     function isAutomationEnabled() {
-        return localStorage.getItem(AUTOMATION_ENABLED_KEY) === '1';
+        return hasAutomationPermission() && localStorage.getItem(AUTOMATION_ENABLED_KEY) === '1';
     }
 
     function setAutomationEnabled(value, showMessage = true) {
+        if (value && !hasAutomationPermission()) {
+            localStorage.setItem(AUTOMATION_ENABLED_KEY, '0');
+            setQueueRunning(false);
+            setQueuePaused(false);
+            clearPhase2Timer?.();
+            return false;
+        }
         localStorage.setItem(AUTOMATION_ENABLED_KEY, value ? '1' : '0');
         if (value) {
             setQueueRunning(true);
@@ -585,28 +616,12 @@
         };
 
         // Ein normaler Klick oder Tastendruck reicht zur Browser-Freigabe. Das ist
-        // vollständig unabhängig davon, ob die versteckte Automatik aktiviert ist.
+        // vollständig unabhängig davon, ob die Automatik aktiviert ist.
         document.addEventListener('pointerdown', activate, true);
         document.addEventListener('keydown', activate, true);
     }
 
-    function installHiddenHotkeys() {
-        if (document._twccHiddenHotkeysInstalled) return;
-        document._twccHiddenHotkeysInstalled = true;
-        document.addEventListener('keydown', e => {
-            if (!e.ctrlKey || !e.altKey || e.repeat) return;
-            const key = String(e.key || '').toLowerCase();
-            if (key === 'p') {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleAutomation();
-            } else if (key === 'i') {
-                e.preventDefault();
-                e.stopPropagation();
-                showAutomationStatus();
-            }
-        }, true);
-    }
+    // Versteckte Automatik-Hotkeys entfernt: Steuerung erfolgt sichtbar im Tool.
 
     function scanOwnVillages() {
         const map = loadJson(STORAGE_KEY, {});
@@ -1141,7 +1156,7 @@
     function openPlaceForAttack(attack, auto = false) {
         const expired = isAttackExpired(attack);
 
-        // Abgelaufene Angriffe bleiben für die versteckte Automatik gesperrt.
+        // Abgelaufene Angriffe bleiben für die Automatik gesperrt.
         // Bei ausgeschalteter Automatik darf das Startdorf aber weiterhin manuell
         // über „Dorf öffnen“ geöffnet werden, ohne einen aktiven Angriff anzulegen.
         if (expired && (auto || isAutomationEnabled())) {
@@ -1185,6 +1200,7 @@
     }
 
     function startNextPhase1() {
+        if (!hasAutomationPermission() || !isAutomationEnabled()) return toast('Automatik ist deaktiviert');
         const attack = getNextOpenAttack();
         if (!attack) {
             toast('Kein offener Angriff im Plan');
@@ -1623,6 +1639,13 @@
                     <span id="twcc-dsu-status" style="margin-left:10px;font-weight:bold;"></span>
                 </div>
 
+                ${hasAutomationPermission() ? `
+                <div id="twcc-dsu-automation-box" style="background:#ead3a2;border:1px solid #8b6b3f;border-radius:6px;padding:8px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <b>🤖 Automatik:</b>
+                    <button id="twcc-dsu-automation-toggle" type="button">AUS</button>
+                    <span id="twcc-dsu-automation-info" style="font-size:11px;">Automatische Abarbeitung ist ausgeschaltet.</span>
+                </div>` : ''}
+
                 <details style="background:#fff8e8;border:1px solid #c7a76b;border-radius:6px;padding:8px;margin-bottom:8px;">
                     <summary style="cursor:pointer;font-weight:bold;">Vorlagen und Vorwarnung einstellen</summary>
                     <div id="twcc-dsu-template-settings" style="display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:6px;margin-top:8px;"></div>
@@ -1685,6 +1708,36 @@
         document.getElementById('twcc-dsu-sound-count').value = String(soundSettings.beepCount);
         document.getElementById('twcc-dsu-sound-volume').value = String(soundSettings.volume);
         document.getElementById('twcc-dsu-sound-frequency').value = String(soundSettings.frequency);
+
+        function refreshAutomationUi() {
+            const btn = document.getElementById('twcc-dsu-automation-toggle');
+            const info = document.getElementById('twcc-dsu-automation-info');
+            const startBtn = document.getElementById('twcc-dsu-start');
+            const allowed = hasAutomationPermission();
+            const enabled = allowed && isAutomationEnabled();
+            if (btn) {
+                btn.textContent = enabled ? 'AN' : 'AUS';
+                btn.title = enabled ? 'Automatik ausschalten' : 'Automatik einschalten';
+                btn.style.fontWeight = 'bold';
+            }
+            if (info) info.textContent = enabled
+                ? 'Automatische Abarbeitung und zeitgesteuertes Senden sind aktiv.'
+                : 'Automatische Abarbeitung ist ausgeschaltet.';
+            if (startBtn) {
+                startBtn.style.display = allowed ? '' : 'none';
+                startBtn.disabled = !enabled;
+                startBtn.title = enabled ? 'Nächsten Angriff automatisch vorbereiten' : 'Zuerst Automatik einschalten';
+            }
+        }
+
+        const automationToggle = document.getElementById('twcc-dsu-automation-toggle');
+        if (automationToggle) {
+            automationToggle.onclick = () => {
+                setAutomationEnabled(!isAutomationEnabled(), true);
+                refreshAutomationUi();
+            };
+        }
+        refreshAutomationUi();
 
         function collectSoundSettings() {
             return {
@@ -1775,6 +1828,7 @@
             currentPlan = plan;
             refreshPreview();
             toast('Status zurückgesetzt');
+            refreshAutomationUi();
         };
 
         document.getElementById('twcc-dsu-clear').onclick = () => {
@@ -1794,6 +1848,7 @@
             currentPlan = [];
             document.getElementById('twcc-dsu-status').textContent = 'gelöscht';
             document.getElementById('twcc-dsu-preview').innerHTML = '';
+            refreshAutomationUi();
         };
 
         document.getElementById('twcc-dsu-parse').onclick = () => {
@@ -2577,7 +2632,11 @@
     }
 
     function init() {
-        installHiddenHotkeys();
+        if (!hasAutomationPermission()) {
+            localStorage.setItem(AUTOMATION_ENABLED_KEY, '0');
+            setQueueRunning(false);
+            setQueuePaused(false);
+        }
         installAudioHostGesture();
         startSendTimeWarningWatchdog();
         startAudioEventPoll();

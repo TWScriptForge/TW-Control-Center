@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         FarmGod Tampermonkey
 // @namespace    FarmGod
-// @version      1.5.4
-// @description  FarmGod als komplettes Tampermonkey/UserScript
+// @version      1.5.5-twcc-automation-split
+// @description  FarmGod TWCC-Test: Approved-Grundfunktion + getrennte Versand-/Loop-Automatik
 // @author      Daniel
 // @match        https://*.die-staemme.de/*
 // @match        https://*.tribalwars.de/*
@@ -466,6 +466,10 @@ window.FarmGod.Main = (function (Library, Translation) {
   const FARMGOD_TAB_ID_KEY = 'FarmGod_tabId';
   const FARMGOD_GLOBAL_DISABLED_KEY = 'FarmGod_globalDisabled';
   const FARMGOD_AUTO_LOOP_KEY = 'FarmGod_autoLoopEnabled';
+  const FARMGOD_AUTOMATION_KEY = 'FarmGod_twccAutomationEnabled';
+  // Später setzt TWCC dieses Capability-Flag anhand von farmGod.automation.
+  // Testversion: true, damit die neue Trennung getestet werden kann.
+  const FARMGOD_AUTOMATION_CAPABILITY = true;
   const FARMGOD_LOOP_RANGE_KEY = 'FarmGod_loopRange';
   const FARMGOD_NEXT_RELOAD_AT_KEY = 'FarmGod_nextReloadAt';
   const FARMGOD_AUTOPLAN_AFTER_RELOAD_KEY = 'FarmGod_autoPlanAfterReload';
@@ -669,7 +673,7 @@ window.FarmGod.Main = (function (Library, Translation) {
   };
 
   const scheduleNextReload = function () {
-    if (!getAutoLoopEnabled() || isFarmGodGlobalDisabled() || !refreshFarmGodEnabled()) return;
+    if (!getAutomationEnabled() || !getAutoLoopEnabled() || isFarmGodGlobalDisabled() || !refreshFarmGodEnabled()) return;
 
     const existing = getNextReloadAt();
     if (existing && existing > Date.now()) return;
@@ -713,7 +717,6 @@ window.FarmGod.Main = (function (Library, Translation) {
     if (v) {
       clearActiveFarmGodTab();
       clearNextReload();
-      stopBotAlarm();
       farmGodEnabled = false;
       farmBusy = false;
       try { Dialog.close(); } catch (err) {}
@@ -772,186 +775,13 @@ window.FarmGod.Main = (function (Library, Translation) {
     markFarmGodActivity();
   }
 
-  const BOT_PAUSED_KEY = 'FarmGod_botPaused';
-  const BOT_BANNER_ID = 'farmgod-bot-banner';
-  const FARMGOD_BOT_ALARM_ENABLED_KEY = 'FarmGod_botAlarmEnabled';
-  const FARMGOD_BOT_ALARM_VOLUME_KEY = 'FarmGod_botAlarmVolume';
-
-  const norm = function (s) {
-    return (s || '').replace(/\s+/g, ' ').trim();
+  const hasAutomationCapability = function () { return FARMGOD_AUTOMATION_CAPABILITY === true; };
+  const getAutomationEnabled = function () {
+    return hasAutomationCapability() && localStorage.getItem(FARMGOD_AUTOMATION_KEY) === '1';
   };
-
-const isBotProtectionActive = function () {
-  const q = document.getElementById('botprotection_quest');
-  if (q) return true;
-
-  const clone = document.body
-    ? document.body.cloneNode(true)
-    : null;
-
-  if (clone) {
-    clone.querySelector('#farmgod-bot-banner')?.remove();
-    clone.querySelector('#farmgod-control')?.remove();
-  }
-
-  const bodyText = norm(clone?.innerText || '');
-
-  if (
-    bodyText.includes('Bot-Schutz-Prüfung') ||
-    bodyText.includes('Bot Schutz Prüfung')
-  ) {
-    return true;
-  }
-
-  return false;
-};
-
-  const setBotPaused = function (v) {
-    localStorage.setItem(BOT_PAUSED_KEY, v ? '1' : '0');
-  };
-
-  const isBotPaused = function () {
-    return localStorage.getItem(BOT_PAUSED_KEY) === '1';
-  };
-
-  const getBotAlarmEnabled = function () {
-    const v = localStorage.getItem(FARMGOD_BOT_ALARM_ENABLED_KEY);
-    return v === null ? true : v === '1';
-  };
-
-  const setBotAlarmEnabled = function (v) {
-    localStorage.setItem(FARMGOD_BOT_ALARM_ENABLED_KEY, v ? '1' : '0');
-  };
-
-  const getBotAlarmVolume = function () {
-    const v = parseFloat(localStorage.getItem(FARMGOD_BOT_ALARM_VOLUME_KEY));
-    return Number.isFinite(v) ? v : 0.5;
-  };
-
-  const setBotAlarmVolume = function (v) {
-    localStorage.setItem(FARMGOD_BOT_ALARM_VOLUME_KEY, String(v));
-  };
-
-  let farmGodAlarmInterval = null;
-
-  const stopBotAlarm = function () {
-    if (farmGodAlarmInterval) {
-      clearInterval(farmGodAlarmInterval);
-      farmGodAlarmInterval = null;
-    }
-  };
-
-  const playBotAlarm = function () {
-    if (!getBotAlarmEnabled()) return;
-    if (farmGodAlarmInterval) return;
-
-    const beep = function () {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-
-        const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.value = 900;
-        gain.gain.value = Math.max(0, Math.min(1, getBotAlarmVolume()));
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start();
-
-        setTimeout(() => {
-          try { osc.stop(); } catch (e) {}
-          try { ctx.close(); } catch (e) {}
-        }, 300);
-      } catch (e) {}
-    };
-
-    beep();
-
-    farmGodAlarmInterval = setInterval(() => {
-      beep();
-    }, 8000);
-  };
-
-  const ensureBotBanner = function () {
-    let el = document.getElementById(BOT_BANNER_ID);
-    if (el) return el;
-
-    el = document.createElement('div');
-    el.id = BOT_BANNER_ID;
-    el.style.cssText = `
-      position:fixed; left:0; right:0; top:0; z-index:2147483647;
-      background:rgba(198,40,40,.95); color:#fff; padding:10px 12px;
-      font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,.35); display:none;
-      user-select:none;
-    `;
-
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <b>🛑 BOT-SCHUTZ aktiv – bitte lösen. FarmGod pausiert.</b>
-        <button id="farmgod-bot-ok" style="cursor:pointer;padding:6px 10px;font-weight:800;">
-          OK, gelöst
-        </button>
-      </div>
-    `;
-
-    document.documentElement.appendChild(el);
-
-el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
-  if (!isBotProtectionActive()) {
-    setBotPaused(false);
-    stopBotAlarm();
-    farmBusy = false;
-    el.style.display = 'none';
-
-    markFarmGodActivity('Bot-Schutz gelöst – läuft weiter');
-    UI.SuccessMessage('Bot-Schutz gelöst. FarmGod läuft weiter.');
-
-    setTimeout(() => {
-      if (!refreshFarmGodEnabled()) return;
-      if (isFarmGodGlobalDisabled()) return;
-      if (isBotPaused() || isBotProtectionActive()) return;
-
-      const nextFarm = $('.farmGod_icon').first();
-
-      if (nextFarm.length) {
-        triggerNextFarm();
-      } else if (getAutoLoopEnabled()) {
-        clearNextReload();
-        localStorage.setItem(FARMGOD_AUTOPLAN_AFTER_RELOAD_KEY, '1');
-        location.reload();
-      }
-    }, 1000);
-  } else {
-    UI.ErrorMessage('Bot-Schutz ist noch aktiv.');
-  }
-});
-
-    return el;
-  };
-
-  const stopForBotProtection = function () {
-    setBotPaused(true);
-    farmBusy = false;
-    markFarmGodActivity('Bot-Schutz erkannt');
-    playBotAlarm();
-    ensureBotBanner().style.display = 'block';
-    UI.ErrorMessage('Bot-Schutz erkannt. FarmGod pausiert.');
-  };
-
-  const botProtectionWatcher = function () {
-    if (isBotProtectionActive()) {
-      stopForBotProtection();
-    } else if (isBotPaused()) {
-      setBotPaused(false);
-      stopBotAlarm();
-      markFarmGodActivity('Bot-Schutz weg');
-      ensureBotBanner().style.display = 'none';
-    }
+  const setAutomationEnabled = function (v) {
+    localStorage.setItem(FARMGOD_AUTOMATION_KEY, v ? '1' : '0');
+    if (!v) setAutoLoopEnabled(false);
   };
 
   const createControlPanel = function () {
@@ -995,14 +825,17 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
         ${isFarmGodGlobalDisabled() ? '▶ Global EIN' : '⛔ Global AUS'}
       </button>
 
+      ${hasAutomationCapability() ? `
       <div style="border-top:1px solid #7D510F;margin:7px 0 5px 0;"></div>
-      <div style="font-size:12px;text-align:left;font-weight:bold;margin-bottom:4px;">🔔 Bot-Alarm</div>
-      <button id="farmgod-bot-alarm-toggle" class="btn" style="width:100%;font-size:13px;padding:5px;margin-bottom:5px;">
-        ${getBotAlarmEnabled() ? '🔔 Alarm AN' : '🔕 Alarm AUS'}
+      <div style="font-size:12px;text-align:left;font-weight:bold;margin-bottom:4px;">🤖 TWCC Automatik</div>
+      <button id="farmgod-automation-toggle" class="btn" style="width:100%;font-size:13px;padding:5px;margin-bottom:5px;">
+        ${getAutomationEnabled() ? '🤖 Automatischer Versand: AN' : '🤖 Automatischer Versand: AUS'}
       </button>
-      <div style="font-size:11px;text-align:left;">Lautstärke: <span id="farmgod-bot-alarm-volume-label">50%</span></div>
-      <input id="farmgod-bot-alarm-volume" type="range" min="0" max="100" value="50" style="width:100%;margin-bottom:5px;">
-
+      <div id="farmgod-automation-status" style="font-size:11px;text-align:left;line-height:1.35;margin-bottom:5px;">
+        ${getAutomationEnabled() ? 'Geplante Farms werden automatisch nacheinander gesendet.' : 'Farms werden nur geplant und müssen manuell ausgelöst werden.'}
+      </div>
+      ` : ''}
+      ${hasAutomationCapability() ? `
       <div style="font-size:12px;text-align:left;margin:4px 0 2px 0;font-weight:bold;">Auto-Neustart</div>
       <button id="farmgod-loop-toggle" class="btn" style="width:100%;font-size:13px;padding:5px;margin-bottom:5px;">
         ${getAutoLoopEnabled() ? '🔁 Loop AN' : '⏸ Loop AUS'}
@@ -1017,6 +850,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
         Nächster Lauf: —
       </div>
 
+      ` : ''}
       <div style="border-top:1px solid #7D510F;margin:7px 0 5px 0;"></div>
       <div style="font-size:12px;text-align:left;font-weight:bold;margin-bottom:4px;">📊 Statistik</div>
       <div id="farmgod-stats" style="font-size:12px;text-align:left;line-height:1.45;">
@@ -1044,19 +878,18 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
 
     const btn = document.getElementById('farmgod-toggle');
     const globalBtn = document.getElementById('farmgod-global-toggle');
+    const automationBtn = document.getElementById('farmgod-automation-toggle');
+    const automationStatus = document.getElementById('farmgod-automation-status');
     const loopBtn = document.getElementById('farmgod-loop-toggle');
     const loopRange = document.getElementById('farmgod-loop-range');
     const nextRun = document.getElementById('farmgod-next-run');
     const statsBox = document.getElementById('farmgod-stats');
     const statsResetBtn = document.getElementById('farmgod-stats-reset');
     const logBox = document.getElementById('farmgod-log');
-    const botAlarmBtn = document.getElementById('farmgod-bot-alarm-toggle');
-    const botAlarmVolume = document.getElementById('farmgod-bot-alarm-volume');
-    const botAlarmVolumeLabel = document.getElementById('farmgod-bot-alarm-volume-label');
     const collapseBtn = document.getElementById('farmgod-collapse');
     const contentBox = document.getElementById('farmgod-content');
 
-    loopRange.value = getLoopRange();
+    if (loopRange) loopRange.value = getLoopRange();
 
     let collapsed = localStorage.getItem(FARMGOD_PANEL_COLLAPSED_KEY) === '1';
 
@@ -1092,20 +925,20 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
         globalBtn.textContent = '⛔ Global AUS';
       }
 
-      botAlarmBtn.textContent = getBotAlarmEnabled() ? '🔔 Alarm AN' : '🔕 Alarm AUS';
-      botAlarmVolume.value = Math.round(getBotAlarmVolume() * 100);
-      botAlarmVolumeLabel.textContent = botAlarmVolume.value + '%';
-
-      loopBtn.textContent = getAutoLoopEnabled() ? '🔁 Loop AN' : '⏸ Loop AUS';
-      loopRange.value = getLoopRange();
+      if (automationBtn) automationBtn.textContent = getAutomationEnabled() ? '🤖 Automatischer Versand: AN' : '🤖 Automatischer Versand: AUS';
+      if (automationStatus) automationStatus.textContent = getAutomationEnabled()
+        ? 'Geplante Farms werden automatisch nacheinander gesendet.'
+        : 'Farms werden nur geplant und müssen manuell ausgelöst werden.';
+      if (loopBtn) { loopBtn.disabled = !getAutomationEnabled(); loopBtn.textContent = getAutoLoopEnabled() ? '🔁 Loop AN' : '⏸ Loop AUS'; }
+      if (loopRange) { loopRange.disabled = !getAutomationEnabled(); loopRange.value = getLoopRange(); }
 
       const reloadAt = getNextReloadAt();
       let reloadText = '—';
 
-      if (getAutoLoopEnabled() && reloadAt > Date.now()) {
+      if (getAutomationEnabled() && getAutoLoopEnabled() && reloadAt > Date.now()) {
         reloadText = formatCountdown(reloadAt - Date.now());
         nextRun.textContent = 'Nächster Lauf: ' + reloadText;
-      } else if (getAutoLoopEnabled()) {
+      } else if (getAutomationEnabled() && getAutoLoopEnabled()) {
         reloadText = 'bereit';
         nextRun.textContent = 'Nächster Lauf: bereit';
       } else {
@@ -1132,26 +965,12 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
         : '—';
     };
 
-    botAlarmBtn.addEventListener('click', (e) => {
+    if (automationBtn) automationBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-
-      setBotAlarmEnabled(!getBotAlarmEnabled());
-
-      if (!getBotAlarmEnabled()) {
-        stopBotAlarm();
-      } else if (isBotPaused() || isBotProtectionActive()) {
-        playBotAlarm();
-      }
-
+      setAutomationEnabled(!getAutomationEnabled());
+      markFarmGodActivity(getAutomationEnabled() ? 'Automatischer Versand AN' : 'Automatischer Versand AUS');
       updateButtonText();
-      UI.SuccessMessage(getBotAlarmEnabled() ? 'Bot-Alarm eingeschaltet' : 'Bot-Alarm ausgeschaltet');
-    });
-
-    botAlarmVolume.addEventListener('input', (e) => {
-      e.stopPropagation();
-
-      setBotAlarmVolume(e.target.value / 100);
-      botAlarmVolumeLabel.textContent = e.target.value + '%';
+      UI.SuccessMessage(getAutomationEnabled() ? 'FarmGod Automatik aktiviert' : 'FarmGod Automatik deaktiviert');
     });
 
     globalBtn.addEventListener('click', (e) => {
@@ -1167,7 +986,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
       );
     });
 
-    loopBtn.addEventListener('click', (e) => {
+    if (loopBtn) loopBtn.addEventListener('click', (e) => {
       e.stopPropagation();
 
       setAutoLoopEnabled(!getAutoLoopEnabled());
@@ -1179,7 +998,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
       );
     });
 
-    loopRange.addEventListener('change', (e) => {
+    if (loopRange) loopRange.addEventListener('change', (e) => {
       e.stopPropagation();
       setLoopRange(loopRange.value);
       updateButtonText();
@@ -1242,7 +1061,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
     setInterval(updateButtonText, 1000);
 
     setInterval(() => {
-      if (isFarmGodGlobalDisabled() || !refreshFarmGodEnabled() || !getAutoLoopEnabled()) return;
+      if (isFarmGodGlobalDisabled() || !refreshFarmGodEnabled() || !getAutomationEnabled() || !getAutoLoopEnabled()) return;
 
       const reloadAt = getNextReloadAt();
       if (reloadAt && Date.now() >= reloadAt) {
@@ -1255,8 +1074,6 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
     setInterval(() => {
       if (isFarmGodGlobalDisabled()) return;
       if (!refreshFarmGodEnabled()) return;
-      if (isBotPaused() || isBotProtectionActive()) return;
-
       const reloadAt = getNextReloadAt();
       if (reloadAt && reloadAt > Date.now()) return;
 
@@ -1275,19 +1092,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
 
     updateButtonText();
 
-    document.addEventListener('keydown', (e) => {
-      if (e.altKey && (e.key || '').toLowerCase() === 'g') {
-        e.preventDefault();
 
-        const nextDisabled = !isFarmGodGlobalDisabled();
-        setFarmGodGlobalDisabled(nextDisabled);
-        updateButtonText();
-
-        UI.SuccessMessage(
-          nextDisabled ? 'FarmGod global ausgeschaltet' : 'FarmGod global eingeschaltet'
-        );
-      }
-    });
 
     let dragging = false;
     let offsetX = 0;
@@ -1370,13 +1175,10 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
   };
 
   const triggerNextFarm = function (delay = null) {
+    if (!getAutomationEnabled()) return;
     setTimeout(() => {
+      if (!getAutomationEnabled()) return;
       if (!refreshFarmGodEnabled()) return;
-
-      if (isBotPaused() || isBotProtectionActive()) {
-        stopForBotProtection();
-        return;
-      }
 
       const nextFarm = $('.farmGod_icon').first();
 
@@ -1387,8 +1189,6 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
       }
     }, getNextFarmDelay(delay));
   };
-
-  setInterval(botProtectionWatcher, 1000);
 
 
   const init = function () {
@@ -1473,7 +1273,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
                   .data('max', plan.counter);
 
                 markFarmGodActivity('Neue Runde gestartet: ' + plan.counter + ' Farms');
-                triggerNextFarm();
+                if (getAutomationEnabled()) triggerNextFarm();
               }).catch((err) => {
                 farmBusy = false;
                 Dialog.close();
@@ -2039,11 +1839,6 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
   const sendFarm = function ($this) {
     if (!refreshFarmGodEnabled()) return;
 
-    if (isBotPaused() || isBotProtectionActive()) {
-      stopForBotProtection();
-      return;
-    }
-
     let n = Timing.getElapsedTimeSinceLoad();
     if (farmBusy) return;
 
@@ -2087,7 +1882,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
           );
           $this.closest('.farmRow').remove();
           farmBusy = false;
-          triggerNextFarm();
+          if (getAutomationEnabled()) triggerNextFarm();
         },
         function (r) {
           UI.ErrorMessage(r || t.messages.sendError);
@@ -2100,7 +1895,7 @@ el.querySelector('#farmgod-bot-ok').addEventListener('click', () => {
           );
           $this.closest('.farmRow').remove();
           farmBusy = false;
-          triggerNextFarm();
+          if (getAutomationEnabled()) triggerNextFarm();
         }
       );
     }

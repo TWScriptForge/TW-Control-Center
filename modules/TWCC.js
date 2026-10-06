@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TW Control Center
 // @namespace    http://tampermonkey.net/
-// @version      3.0.0
-// @description  TW Control Center 3.0.0 – modulare Basis von TWScriptForge
+// @version      3.1.0
+// @description  TW Control Center 3.1.0 – Core Foundation von TWScriptForge
 // @author       TWScriptForge
 // @match        https://*.die-staemme.de/*
 // @match        https://*.tribalwars.de/*
@@ -30,8 +30,8 @@
     const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     win.TWCC_CoreInfo = Object.freeze({
         name: 'TW Control Center',
-        version: '3.0.0',
-        phase: 'theme-engine-live'
+        version: '3.1.0',
+        phase: 'core-foundation'
     });
     const $ = win.jQuery || win.$;
 
@@ -39,6 +39,37 @@
         console.warn('[TW Control Center] jQuery nicht gefunden. Script gestoppt.');
         return;
     }
+
+
+    // =======================
+    // TWCC 3.1 Core Foundation
+    // Nur Identitaet/Grundschnittstellen; bestehende Module bleiben unveraendert.
+    // =======================
+    function getTwccIdentity() {
+        const gd = win.game_data || (typeof game_data !== 'undefined' ? game_data : {}) || {};
+        const player = gd.player || {};
+        const worldFromHost = (location.hostname.match(/^([a-z]+\d+)\./i) || [])[1] || location.hostname;
+        return Object.freeze({
+            playerId: player.id != null ? String(player.id) : '',
+            playerName: player.name != null ? String(player.name) : '',
+            world: String(gd.world || worldFromHost || ''),
+            host: location.hostname,
+            role: 'player',
+            authorization: 'phase-2'
+        });
+    }
+
+    win.TWCC_Foundation = Object.freeze({
+        version: '3.1.0',
+        identity: getTwccIdentity(),
+        roles: Object.freeze(['owner', 'sf2', 'sf1', 'player']),
+        capabilities: Object.freeze({
+            messagesRead: 'messages.read',
+            messagesManage: 'messages.manage',
+            moduleUse: 'module.use',
+            automationUse: 'automation.use'
+        })
+    });
 
     $.ajaxSetup({ cache: true });
 
@@ -2845,7 +2876,7 @@
     function exportTwccSettings() {
         const data = {
             exportedAt: new Date().toISOString(),
-            version: '2.1.3',
+            version: '3.1.0',
             core: core,
             tabOverrides: tabOverrides,
             aoConfig: typeof aoConfig !== 'undefined' ? aoConfig : null,
@@ -3276,7 +3307,7 @@
             <div class="twx-tool-section">
                 <h4>📝 Changelog</h4>
                 <div class="twx-small">
-                    <b>v2.1.3</b><br>
+                    <b>v3.1.0</b><br>
                     + Werkzeuge-Fenster<br>
                     + Export/Import Einstellungen<br>
                     + CacheBust pro Modul und global<br>
@@ -3360,7 +3391,7 @@
         const content = `
             <div class="twx-info-box">
                 <h3 style="margin-top:0;">🛠 TWCC Developer</h3>
-                <div><span class="twx-pill">Module ${active.length}/${modules.length}</span><span class="twx-pill">Core v2.1.3</span><span class="twx-pill">${escapeHtml((typeof game_data !== 'undefined' ? game_data.world : '') || 'unknown')}</span></div>
+                <div><span class="twx-pill">Module ${active.length}/${modules.length}</span><span class="twx-pill">Core v3.1.0</span><span class="twx-pill">${escapeHtml((typeof game_data !== 'undefined' ? game_data.world : '') || 'unknown')}</span></div>
                 <div class="twx-tool-section">
                     <h4>Seite</h4>
                     <div class="twx-small"><b>URL:</b> ${escapeHtml(currentPage)}<br><b>Screen:</b> ${escapeHtml((typeof game_data !== 'undefined' ? game_data.screen : '') || '-')}</div>

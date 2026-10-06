@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DS Premium-Depot Quick Buttons v4.0
 // @namespace    https://tampermonkey.net/
-// @version      4.0.0
-// @description  Konfigurierbare Quick Buttons im Premium-Depot mit verstecktem Auto-Modus und Status-Hotkeys.
+// @version      4.1.0
+// @description  Quick Buttons für Kaufen/Verkaufen mit sichtbarer, getrennt berechtigbarer Automatik.
 // @author       Daniel
 // @match        *://*.die-staemme.de/*
 // @grant        none
@@ -12,10 +12,10 @@
   'use strict';
 
   const MODULE_ID = 'twcc-premium-depot-quick-buttons';
-  const VERSION = '4.0.0';
+  const VERSION = '4.1.0';
   const STORAGE = {
     buttons: `${MODULE_ID}:buttons`,
-    auto: `${MODULE_ID}:auto`,
+    auto: `${MODULE_ID}:automation-v2`,
     debug: `${MODULE_ID}:debug`
   };
 
@@ -33,6 +33,16 @@
     stone: 'premium_exchange_stock_stone',
     iron: 'premium_exchange_stock_iron'
   };
+  const PLAYER_STOCK_IDS = { wood: 'wood', stone: 'stone', iron: 'iron' };
+
+  // Standalone-Test: true. Später liefert TWCC/Supabase diese Capability.
+  function hasAutomationCapability() {
+    try {
+      const api = window.TWCC?.permissions || window.TWCC_Permissions;
+      if (api && typeof api.has === 'function') return api.has('premiumDepot.automation') === true;
+    } catch {}
+    return true;
+  }
 
   let initialized = false;
   let lastQuickAction = null;
@@ -97,24 +107,65 @@
       bar.textContent = '';
       bar.dataset.signature = signature;
 
-      buttons.forEach(config => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'pdq-quick-button';
-        button.textContent = String(config.label || '');
-        button.dataset.buttonId = String(config.id || '');
-        button.dataset.resource = resource;
-        button.style.cssText = 'padding:4px 8px;border:0;border-radius:12px;cursor:pointer;font-weight:600;background:#6b4e23;color:#fff;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)';
-        button.addEventListener('click', event => {
-          event.preventDefault();
-          event.stopPropagation();
-          onQuickButtonClick(config, input, resource);
-        });
-        bar.appendChild(button);
-      });
+      buttons.forEach(config => addQuickButton(bar, config, input, resource, 'buy'));
+
+      const sellInput = findSellInput(resource);
+      if (sellInput) {
+        let sellWrap = sellInput.closest('.pdq-sell-wrap');
+        if (!sellWrap) {
+          sellWrap = document.createElement('div');
+          sellWrap.className = 'pdq-sell-wrap';
+          sellWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:6px';
+          sellInput.parentNode.insertBefore(sellWrap, sellInput);
+          sellWrap.appendChild(sellInput);
+        }
+        let sellBar = sellWrap.querySelector('.pdq-sell-button-bar');
+        if (!sellBar) {
+          sellBar = document.createElement('div');
+          sellBar.className = 'pdq-sell-button-bar';
+          sellBar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+          sellWrap.appendChild(sellBar);
+        }
+        if (sellBar.dataset.signature !== signature) {
+          sellBar.textContent = '';
+          sellBar.dataset.signature = signature;
+          buttons.forEach(config => addQuickButton(sellBar, config, sellInput, resource, 'sell'));
+        }
+      }
     });
 
+    renderAutomationToggle();
     initialized = true;
+  }
+
+  function addQuickButton(bar, config, input, resource, mode) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pdq-quick-button';
+    button.textContent = String(config.label || '');
+    button.dataset.buttonId = String(config.id || '');
+    button.dataset.resource = resource;
+    button.dataset.mode = mode;
+    button.style.cssText = 'padding:4px 8px;border:0;border-radius:12px;cursor:pointer;font-weight:600;background:#6b4e23;color:#fff;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)';
+    button.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      onQuickButtonClick(config, input, resource, mode);
+    });
+    bar.appendChild(button);
+  }
+
+  function renderAutomationToggle() {
+    document.getElementById('pdq-automation-toggle')?.remove();
+    if (!hasAutomationCapability()) return;
+    const anchor = document.querySelector('.pdq-wrap, .pdq-sell-wrap');
+    if (!anchor) return;
+    const btn = document.createElement('button');
+    btn.id = 'pdq-automation-toggle'; btn.type = 'button';
+    btn.style.cssText = 'margin:8px 0;padding:6px 10px;border:0;border-radius:8px;cursor:pointer;font-weight:700;background:#6b4e23;color:#fff';
+    const refresh = () => btn.textContent = `🤖 Automatik: ${isAutoEnabled() ? 'AN' : 'AUS'}`;
+    refresh();
+    btn.addEventListener('click', e => { e.preventDefault(); setAutoEnabled(!isAutoEnabled()); refresh(); });
+    anchor.parentNode.insertBefore(btn, anchor);
   }
 
   function findBuyInput(resource) {
@@ -131,12 +182,18 @@
       document.querySelector(`input[name$="_${resource}"]`) || null;
   }
 
-  async function onQuickButtonClick(config, input, resource) {
+  function findSellInput(resource) {
+    return document.querySelector(`input.premium-exchange-input[data-type="sell"][data-resource="${resource}"]`) ||
+      document.querySelector(`#premium_exchange_sell_${resource} input.premium-exchange-input[data-type="sell"], #premium_exchange_sell_${resource} input[type="number"], #premium_exchange_sell_${resource} input[type="text"]`) ||
+      document.querySelector(`input[data-type="sell"][name$="_${resource}"]`) || null;
+  }
+
+  async function onQuickButtonClick(config, input, resource, mode = 'buy') {
     if (!isExchangePage()) return toast('Nicht im Premium-Depot.');
 
-    const currentInput = findBuyInput(resource);
+    const currentInput = mode === 'sell' ? findSellInput(resource) : findBuyInput(resource);
     if (!currentInput || currentInput !== input) {
-      return toast(`BUY-Feld für ${resource} nicht eindeutig gefunden.`);
+      return toast(`${mode === 'sell' ? 'SELL' : 'BUY'}-Feld für ${resource} nicht eindeutig gefunden.`);
     }
 
     let finalValue;
@@ -144,7 +201,7 @@
       finalValue = toInt(prompt('Wert eingeben:', '100000'));
       if (!finalValue) return toast('Ungültige Zahl.');
     } else if (config.type === 'max') {
-      finalValue = readStock(resource);
+      finalValue = mode === 'sell' ? readPlayerStock(resource) : readStock(resource);
       if (!finalValue) return toast('Vorrat nicht gefunden.');
     } else {
       finalValue = toInt(config.value);
@@ -152,7 +209,7 @@
     }
 
     setValue(input, finalValue);
-    lastQuickAction = { resource, value: finalValue, time: Date.now() };
+    lastQuickAction = { resource, value: finalValue, mode, time: Date.now() };
 
     if (isAutoEnabled()) {
       toast(`Auto: ${config.label} → ${resource}`, 1000);
@@ -160,14 +217,14 @@
     }
   }
 
-  async function runAutoConfirm(input) {
+  async function runAutoConfirm(input, mode) {
     if (!lastQuickAction || Date.now() - lastQuickAction.time > 4000) return;
     if (!isExchangePage() || !document.contains(input)) return;
 
     // Ein künstliches Enter löst im Browser keine native Formularaktion aus.
     // Deshalb wird der zum BUY-Feld gehörende Kaufen-Button bzw. das Formular benutzt.
     await sleep(180);
-    const firstStep = submitBuyField(input, lastQuickAction.resource);
+    const firstStep = submitTradeField(input, lastQuickAction.resource, mode);
     if (!firstStep) {
       toast('Auto: Kaufen-Schaltfläche nicht gefunden.', 2600);
       return;
@@ -189,8 +246,8 @@
     confirmTarget.click();
   }
 
-  function submitBuyField(input, resource) {
-    const cell = input.closest(`#premium_exchange_buy_${resource}`) || input.closest('td');
+  function submitTradeField(input, resource, mode) {
+    const cell = input.closest(`#premium_exchange_${mode}_${resource}`) || input.closest('td');
     const row = input.closest('tr');
     const form = input.closest('form');
 
@@ -211,8 +268,9 @@
           if (!isVisible(node) || node === input || node.classList.contains('pdq-quick-button')) continue;
           const text = String(node.textContent || node.value || node.title || '').trim().toLowerCase();
           const type = String(node.dataset?.type || '').toLowerCase();
-          if (type === 'sell' || /verkauf|sell/.test(text)) continue;
-          if (type === 'buy' || /kauf|buy|tausch|exchange|berechnen|weiter/.test(text) || node.type === 'submit') {
+          if (mode === 'buy' && (type === 'sell' || /verkauf|sell/.test(text))) continue;
+          if (mode === 'sell' && (type === 'buy' || /kauf|buy/.test(text))) continue;
+          if (type === mode || (mode === 'buy' ? /kauf|buy/ : /verkauf|sell/).test(text) || /tausch|exchange|berechnen|weiter/.test(text) || node.type === 'submit') {
             node.click();
             return true;
           }
@@ -278,6 +336,16 @@
     return element ? pickNumber(element.textContent || element.innerText) : null;
   }
 
+  function readPlayerStock(resource) {
+    const id = PLAYER_STOCK_IDS[resource];
+    const el = document.getElementById(id);
+    const value = el ? pickNumber(el.textContent || el.innerText) : null;
+    if (value) return value;
+    const gd = window.game_data?.village;
+    const candidate = gd && (gd[resource] ?? (resource === 'stone' ? gd.stone : null));
+    return toInt(candidate);
+  }
+
   function setValue(input, value) {
     const prototype = Object.getPrototypeOf(input);
     const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
@@ -296,19 +364,6 @@
     document.addEventListener('keydown', event => {
       if (!event.ctrlKey || !event.altKey || event.repeat) return;
       const key = event.key.toLowerCase();
-
-      if (key === 'b') {
-        event.preventDefault();
-        const next = !isAutoEnabled();
-        localStorage.setItem(STORAGE.auto, JSON.stringify(next));
-        toast(`Auto-Bestätigung: ${next ? 'EIN' : 'AUS'}`, 2200);
-      }
-
-      if (key === 'i') {
-        event.preventDefault();
-        showStatus();
-      }
-
       if (key === 'd') {
         event.preventDefault();
         const next = !isDebugEnabled();
@@ -330,7 +385,7 @@
       `Auto-Bestätigung: ${isAutoEnabled() ? 'EIN' : 'AUS'}`,
       `Debug: ${isDebugEnabled() ? 'EIN' : 'AUS'}`,
       `Buttons: ${buttons.length}`,
-        `Hotkeys: Ctrl+Alt+B Auto · Ctrl+Alt+I Info · Ctrl+Alt+D Debug`,
+        `Hotkey: Ctrl+Alt+D Debug`,
       found
     ].join('\n'), 6500, true);
   }
@@ -345,8 +400,16 @@
   }
 
   function isAutoEnabled() {
+    if (!hasAutomationCapability()) return false;
     try { return JSON.parse(localStorage.getItem(STORAGE.auto) || 'false') === true; }
     catch { return false; }
+  }
+
+  function setAutoEnabled(value) {
+    const enabled = hasAutomationCapability() && value === true;
+    localStorage.setItem(STORAGE.auto, JSON.stringify(enabled));
+    toast(`Automatik: ${enabled ? 'AN' : 'AUS'}`, 1600);
+    return enabled;
   }
 
   function isDebugEnabled() {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DS Premium-Depot Quick Buttons v4.0
 // @namespace    https://tampermonkey.net/
-// @version      4.1.0
+// @version      4.1.1
 // @description  Quick Buttons für Kaufen/Verkaufen mit sichtbarer, getrennt berechtigbarer Automatik.
 // @author       Daniel
 // @match        *://*.die-staemme.de/*
@@ -12,7 +12,7 @@
   'use strict';
 
   const MODULE_ID = 'twcc-premium-depot-quick-buttons';
-  const VERSION = '4.1.0';
+  const VERSION = '4.1.1';
   const STORAGE = {
     buttons: `${MODULE_ID}:buttons`,
     auto: `${MODULE_ID}:automation-v2`,
@@ -155,17 +155,55 @@
   }
 
   function renderAutomationToggle() {
-    document.getElementById('pdq-automation-toggle')?.remove();
-    if (!hasAutomationCapability()) return;
+    let btn = document.getElementById('pdq-automation-toggle');
+    if (!hasAutomationCapability()) {
+      btn?.remove();
+      return;
+    }
+
     const anchor = document.querySelector('.pdq-wrap, .pdq-sell-wrap');
     if (!anchor) return;
-    const btn = document.createElement('button');
-    btn.id = 'pdq-automation-toggle'; btn.type = 'button';
-    btn.style.cssText = 'margin:8px 0;padding:6px 10px;border:0;border-radius:8px;cursor:pointer;font-weight:700;background:#6b4e23;color:#fff';
-    const refresh = () => btn.textContent = `🤖 Automatik: ${isAutoEnabled() ? 'AN' : 'AUS'}`;
-    refresh();
-    btn.addEventListener('click', e => { e.preventDefault(); setAutoEnabled(!isAutoEnabled()); refresh(); });
-    anchor.parentNode.insertBefore(btn, anchor);
+
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'pdq-automation-toggle';
+      btn.type = 'button';
+      btn.style.cssText = 'position:absolute;z-index:50;width:92px;min-height:42px;padding:6px 8px;border:0;border-radius:8px;cursor:pointer;font-weight:700;line-height:1.15;text-align:center;background:#6b4e23;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)';
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        setAutoEnabled(!isAutoEnabled());
+        updateAutomationToggle();
+      });
+      document.body.appendChild(btn);
+    }
+
+    updateAutomationToggle();
+    positionAutomationToggle();
+  }
+
+  function updateAutomationToggle() {
+    const btn = document.getElementById('pdq-automation-toggle');
+    if (!btn) return;
+    btn.textContent = `🤖 Automatik: ${isAutoEnabled() ? 'AN' : 'AUS'}`;
+  }
+
+  function positionAutomationToggle() {
+    const btn = document.getElementById('pdq-automation-toggle');
+    const anchor = document.querySelector('.pdq-wrap, .pdq-sell-wrap');
+    if (!btn || !anchor) return;
+
+    const table = anchor.closest('table');
+    const ref = table || anchor;
+    const rect = ref.getBoundingClientRect();
+    const buttonWidth = btn.offsetWidth || 92;
+    const gap = 12;
+
+    // Links neben dem Premium-Depot, im freien Bereich unter dem Markt-Menü.
+    const left = Math.max(8, window.scrollX + rect.left - buttonWidth - gap);
+    const top = window.scrollY + rect.top + 82;
+    btn.style.left = `${Math.round(left)}px`;
+    btn.style.top = `${Math.round(top)}px`;
   }
 
   function findBuyInput(resource) {
@@ -465,6 +503,9 @@
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  window.addEventListener('resize', debounce(positionAutomationToggle, 80));
+  window.addEventListener('scroll', debounce(positionAutomationToggle, 40), { passive: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', start, { once: true });

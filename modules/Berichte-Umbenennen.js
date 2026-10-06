@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Die Stämme - Berichte Umbenennen + Dorfnotiz V5.6
+// @name         Die Stämme - Berichte Umbenennen + Dorfnotiz V5.7
 // @namespace    http://tampermonkey.net/
-// @version      5.6
+// @version      5.7
 // @description  Benennt einzelne oder markierte Berichte stabil nacheinander um und überschreibt die zugehörige Dorfnotiz
 // @author       Daniel
 // @match        https://*.die-staemme.de/game.php*
@@ -588,27 +588,77 @@ function initBerichteUmbenennenUndDorfnotiz() {
         return ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'].slice(0, UNIT_COUNT);
     }
 
+    function getOutsideTroops() {
+        const units = getUnitNames();
+        const rows = Array.from(document.querySelectorAll('tr'));
+        const labelRow = rows.find(row => /^Einheiten außerhalb:?$/i.test(rowFirstCellText(row)));
+        if (!labelRow) return null;
+
+        // Die eigentlichen Zahlen stehen je nach Berichtslayout in der nächsten Zeile
+        // oder in derselben Tabelle unterhalb der Überschrift. Wir lesen nur diesen Block.
+        const table = labelRow.closest('table');
+        const tableRows = table ? Array.from(table.querySelectorAll('tr')) : rows;
+        const startIndex = tableRows.indexOf(labelRow);
+        const candidates = startIndex >= 0 ? tableRows.slice(startIndex + 1, startIndex + 4) : [];
+
+        for (const row of candidates) {
+            const cells = Array.from(row.querySelectorAll('td,th'));
+            const numbers = cells.map(cell => {
+                const text = cleanText(cell.innerText);
+                return /^\d+$/.test(text) ? parseInt(text, 10) : null;
+            }).filter(value => value !== null);
+
+            if (numbers.length >= Math.min(6, units.length)) {
+                return numbers.slice(0, units.length);
+            }
+        }
+
+        // Fallback: Zahlen aus dem sichtbaren Text direkt nach der Überschrift.
+        const blockText = cleanText((table || labelRow.parentElement || labelRow).innerText);
+        const marker = blockText.search(/Einheiten außerhalb:?/i);
+        if (marker >= 0) {
+            const after = blockText.slice(marker).replace(/^Einheiten außerhalb:?\s*/i, '');
+            const numbers = (after.match(/\b\d+\b/g) || []).map(Number);
+            if (numbers.length >= Math.min(6, units.length)) return numbers.slice(0, units.length);
+        }
+
+        return null;
+    }
+
     function classifyVillage(party) {
         const units = getUnitNames();
-        const counts = (party?.counts || []).slice(0, units.length);
-        let offensive = 0;
-        let defensive = 0;
+        const outside = getOutsideTroops();
+        // Einheiten außerhalb gehören sicher zum Ziel-Dorf und haben daher Vorrang.
+        const counts = (outside || party?.counts || []).slice(0, units.length);
+
+        let offensivePopulation = 0;
+        let defensivePopulation = 0;
+        let offensiveUnits = 0;
 
         counts.forEach((amount, index) => {
             const unit = units[index];
+            const number = Number(amount) || 0;
             const population = UNIT_POPULATION[unit] || 1;
-            const value = (Number(amount) || 0) * population;
+            const value = number * population;
 
-            if (['axe', 'light', 'marcher', 'ram', 'catapult'].includes(unit)) offensive += value;
-            if (['spear', 'sword', 'archer', 'heavy'].includes(unit)) defensive += value;
+            // Gewünschte Off-Schwelle zählt echte Einheiten, nicht Bauernhofplätze.
+            if (['axe', 'light', 'ram', 'catapult'].includes(unit)) offensiveUnits += number;
+            if (['axe', 'light', 'marcher', 'ram', 'catapult'].includes(unit)) offensivePopulation += value;
+            if (['spear', 'sword', 'archer', 'heavy'].includes(unit)) defensivePopulation += value;
         });
 
         if (!counts.some(n => Number(n) > 0)) return 'Keine überlebenden Truppen erkannt';
-        if (offensive > 3000) return 'Offensivdorf';
-        if (offensive > 500) return 'Vermutlich Offensivdorf';
-        if (defensive > 1000) return 'Defensivdorf';
-        if (defensive > 500) return 'Vermutlich Defensivdorf';
-        return offensive > defensive ? 'Vermutlich Offensivdorf' : 'Vermutlich Defensivdorf';
+
+        // Erst ab mindestens 1.000 Axt + LKav + Rammen + Katapult darf
+        // das Dorf überhaupt als (vermutlich) offensiv eingestuft werden.
+        if (offensiveUnits >= 1000) {
+            if (offensivePopulation > 3000 && offensivePopulation > defensivePopulation) return 'Offensivdorf';
+            return 'Vermutlich Offensivdorf';
+        }
+
+        if (defensivePopulation > 1000) return 'Defensivdorf';
+        if (defensivePopulation > 500) return 'Vermutlich Defensivdorf';
+        return 'Dorftyp unbekannt';
     }
 
     function getChurchText() {
@@ -812,8 +862,8 @@ function initBerichteUmbenennenUndDorfnotiz() {
 
     function resetButton(btn) {
         btn.innerHTML = isReportDetailPage()
-            ? '⚡ BERICHT UMBENENNEN<br>UND DORFNOTIZ<br>ÜBERSCHREIBEN<br>V5.5 ⚡'
-            : '⚡ MARKIERTE BERICHTE<br>UMBENENNEN UND<br>DORFNOTIZEN ÜBERSCHREIBEN<br>V5.5 ⚡';
+            ? '⚡ BERICHT UMBENENNEN<br>UND DORFNOTIZ<br>ÜBERSCHREIBEN<br>V5.7 ⚡'
+            : '⚡ MARKIERTE BERICHTE<br>UMBENENNEN UND<br>DORFNOTIZEN ÜBERSCHREIBEN<br>V5.7 ⚡';
         btn.style.backgroundColor = '#61b15a';
         btn.disabled = false;
     }
